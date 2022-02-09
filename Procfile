@@ -1,1 +1,1 @@
-web: fastify start app.js
+web: fastify start dist/app.js
