@@ -98,7 +98,7 @@ const categoriesRoute: FastifyPluginAsync = async (fastify, opts): Promise<void>
     const { name, description, p_categoryId } = request.body
     const { id } = request.params
 
-    const category = await prisma.category.update({
+    await prisma.category.update({
       where: {
         id
       },
@@ -110,14 +110,27 @@ const categoriesRoute: FastifyPluginAsync = async (fastify, opts): Promise<void>
             id: Number(p_categoryId)
           }
         }
-      }, include: {
+      },
+      include: {
         p_category: true,
-        // categories: true,
         works: true,
         skills: true,
         jobs: true
       }
     });
+
+    const category = await prisma.category.findUnique({
+      where: {
+        id: Number(id),
+      },
+      include: {
+        works: true,
+        skills: true,
+        jobs: true,
+        catergories: true,
+      }
+    })
+
     return {
       category
     };
