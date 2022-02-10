@@ -124,6 +124,7 @@ const categoriesRoute: FastifyPluginAsync = async (fastify, opts): Promise<void>
         id: Number(id),
       },
       include: {
+        p_category: true,
         works: true,
         skills: true,
         jobs: true,
