@@ -63,7 +63,3 @@ test/types/index.js
 
 # compiled app
 dist
-
-# enviroment
-.env
-package-lock.jsons
