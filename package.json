@@ -9,6 +9,7 @@
   "scripts": {
     "test": "npm run build:ts && tsc -p test/tsconfig.json && tap --ts \"test/**/*.test.ts\"",
     "start": "npm run build:ts && fastify start -l info dist/app.js",
+    "build": "npx prisma migrate deploy && npm run build:ts",
     "build:ts": "tsc",
     "watch:ts": "tsc -w",
     "dev": "npm run build:ts && concurrently -k -p \"[{name}]\" -n \"TypeScript,App\" -c \"yellow.bold,cyan.bold\" \"npm:watch:ts\" \"npm:dev:start\"",
@@ -33,7 +34,7 @@
     "@fastify/sensible": "^4.1.0",
     "@fastify/websocket": "^6.0.1",
     "@prisma/client": "^4.2.1",
-    "fast-jwt": "^1.6.1",
+    "fast-jwt": "^1.7.1",
     "fastify": "^4.0.0",
     "fastify-bcrypt": "^1.0.0",
     "fastify-cli": "^4.3.0",

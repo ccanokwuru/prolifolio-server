@@ -1,16 +1,43 @@
-import { join } from 'path';
-import AutoLoad, {AutoloadPluginOptions} from '@fastify/autoload';
-import { FastifyPluginAsync } from 'fastify';
+import { join } from "path";
+import AutoLoad, { AutoloadPluginOptions } from "@fastify/autoload";
+import { FastifyPluginAsync } from "fastify";
+import fastifyAuth from "@fastify/auth";
+import fastifyJwt from "@fastify/jwt";
+import fastifyBcrypt from "fastify-bcrypt";
 
 export type AppOptions = {
   // Place your custom options for app below here.
 } & Partial<AutoloadPluginOptions>;
 
 const app: FastifyPluginAsync<AppOptions> = async (
-    fastify,
-    opts
+  fastify,
+  opts
 ): Promise<void> => {
   // Place here your custom code!
+
+  // fastify.register(fastifyCors, {
+  //   origin: "*",
+  // });
+
+  // fastify.register(fastifyCookie, {
+  //   secret: process.env.COOKIE_SECRET,
+  //   parseOptions: {},
+  // } as FastifyCookieOptions);
+
+  fastify.register(fastifyBcrypt, {
+    saltWorkFactor: 10,
+  });
+
+  fastify.register(fastifyAuth);
+
+  fastify.register(fastifyJwt, {
+    secret:
+      process.env.JWT_SECRET ||
+      "ac0544fe9c6d36b7451cb321239a9e954194972a27758e204118767155c5662b32c23ec9a7f9d5046689dbc8714e180359f1acd75639921ecffe3d40905ed1b4",
+    sign: {
+      expiresIn: 3e5,
+    },
+  });
 
   // Do not touch the following lines
 
@@ -18,18 +45,17 @@ const app: FastifyPluginAsync<AppOptions> = async (
   // those should be support plugins that are reused
   // through your application
   void fastify.register(AutoLoad, {
-    dir: join(__dirname, 'plugins'),
-    options: opts
-  })
+    dir: join(__dirname, "plugins"),
+    options: opts,
+  });
 
   // This loads all plugins defined in routes
   // define your routes in one of these
   void fastify.register(AutoLoad, {
-    dir: join(__dirname, 'routes'),
-    options: opts
-  })
-
+    dir: join(__dirname, "routes"),
+    options: opts,
+  });
 };
 
 export default app;
-export { app }
+export { app };
