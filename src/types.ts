@@ -10,4 +10,10 @@ enum MESSAGE {
   BROADCAST = "broadcast",
 }
 
-export { ROLE, MESSAGE };
+enum CONTACT {
+  DEFAULT = "default",
+  RESIDENTIAL = "residential",
+  OFFICE = "office",
+}
+
+export { ROLE, MESSAGE, CONTACT };

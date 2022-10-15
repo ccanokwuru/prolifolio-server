@@ -2,7 +2,7 @@ import { PrismaClient } from "@prisma/client";
 import { createVerifier } from "fast-jwt";
 import { FastifyReply, FastifyRequest, HookHandlerDoneFunction } from "fastify";
 import fp from "fastify-plugin";
-// import { ROLE } from "../types";
+import { ROLE } from "../types";
 
 const prisma = new PrismaClient();
 const JWT_Verifier = createVerifier({ key: process.env.REFRESH_SECRET });
@@ -17,12 +17,10 @@ module.exports = fp(async function (fastify, opts) {
       done: HookHandlerDoneFunction
     ) => {
       // @ts-ignore
-      let token = "";
-      // token  = request.cookies ?? '';
       const { authorization } = request.headers;
       const authToken = authorization?.startsWith("Bearer ")
         ? authorization.split(" ")[1]
-        : token;
+        : "";
 
       // check if request has token
       if (!authToken.length) return reply.forbidden(`authentication required`);
@@ -84,21 +82,18 @@ module.exports = fp(async function (fastify, opts) {
       // @ts-ignore
       const { userId, ownerId, creatorId, authorId } = request.body;
 
-      const userInfo = request?.user;
-
-      console.log(userInfo);
-
-      // if (
-      //   userInfo?.userId !== userId &&
-      //   userInfo?.userId !== ownerId &&
-      //   userInfo?.userId !== creatorId &&
-      //   userInfo?.userId !== authorId &&
-      //   userInfo?.userId !== user
-      // )
-      //   return reply.unauthorized(
-      //     "owner only; you are not authorised for this"
-      //   );
-      return done;
+      // @ts-ignore
+      return request.user?.userId !== userId &&
+        // @ts-ignore
+        request.user?.userId !== ownerId &&
+        // @ts-ignore
+        request.user?.userId !== creatorId &&
+        // @ts-ignore
+        request.user?.userId !== authorId &&
+        // @ts-ignore
+        request.user?.userId !== user
+        ? reply.unauthorized("owner only; you are not authorised for this")
+        : done;
     }
   );
 
@@ -110,11 +105,10 @@ module.exports = fp(async function (fastify, opts) {
       reply: FastifyReply,
       done: HookHandlerDoneFunction
     ) => {
-      console.log(request.user);
-      return done;
-      // return request.user?.role !== ROLE.ARTIST
-      //   ? reply.unauthorized("owner only; you are not authorised for this")
-      //   : done;
+      // @ts-ignore
+      return request.user?.role !== ROLE.ARTIST
+        ? reply.unauthorized("owner only; you are not authorised for this")
+        : done;
     }
   );
 
@@ -131,22 +125,35 @@ module.exports = fp(async function (fastify, opts) {
       // @ts-ignore
       const { userId, ownerId, creatorId, authorId } = request.body;
 
-      const userInfo = JSON.parse(JSON.stringify(request.user));
+      // @ts-ignore
+      return request.user?.userId !== userId &&
+        // @ts-ignore
+        request.user?.userId !== ownerId &&
+        // @ts-ignore
+        request.user?.userId !== creatorId &&
+        // @ts-ignore
+        request.user?.userId !== authorId &&
+        // @ts-ignore
+        request.user?.userId !== user &&
+        // @ts-ignore
+        request.user?.role !== "admin"
+        ? reply.unauthorized("specific roles; you are not authorised for this")
+        : done;
+    }
+  );
 
-      if (
-        userInfo?.userId !== userId &&
-        userInfo?.userId !== ownerId &&
-        userInfo?.userId !== creatorId &&
-        userInfo?.userId !== authorId &&
-        userInfo?.userId !== user &&
-        userInfo?.role !== "admin"
-      )
-        return reply.unauthorized(
-          "specific roles; you are not authorised for this"
-        );
-      return done;
-
-      return done;
+  // authorise admins only
+  fastify.decorate(
+    "is_admin",
+    async (
+      request: FastifyRequest,
+      reply: FastifyReply,
+      done: HookHandlerDoneFunction
+    ) => {
+      // @ts-ignore
+      return request.user?.role !== ROLE.ADMIN
+        ? reply.unauthorized("admin only")
+        : done;
     }
   );
 });

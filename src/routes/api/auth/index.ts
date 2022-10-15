@@ -1,13 +1,13 @@
 import { AuthRecovery, PrismaClient, User } from "@prisma/client";
-import { randomBytes } from "crypto";
 import { FastifyPluginAsync } from "fastify";
-import { ROLE } from "../../types";
+import { ROLE } from "../../../types";
 import {
   checkEmail,
   checkPassword,
   checkMatchPassword,
-} from "../../utils/checkers";
-import { JWT_Signer } from "../../utils/jwt";
+} from "../../../utils/checkers";
+import { JWT_Signer, JWT_Verifier } from "../../../utils/jwt";
+import { uniqueToken } from "../../../utils/uniqueToken";
 const prisma = new PrismaClient();
 
 interface LoginI {
@@ -32,7 +32,6 @@ const auth: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
   fastify.post<{ Body: RegisterI }>(
     "/register",
     async function (request, reply) {
-      let userExits = false;
       const errors: string[] = [];
       const {
         email,
@@ -55,10 +54,8 @@ const auth: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
         errors.push("first_name is required");
       if (!last_name || !last_name.length) errors.push("last_name is required");
 
-      console.log(errors);
-
       if (errors.length)
-        return reply.code(403).send({
+        return reply.code(400).send({
           message: "Registration failed",
           errors,
         });
@@ -73,6 +70,12 @@ const auth: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
           "invalid password format 6+ characters, 1+ uppercase, 1+ symbols or number "
         );
 
+      if (errors.length)
+        return reply.code(406).send({
+          message: "Registration failed",
+          errors,
+        });
+
       // check if user exits aready
       try {
         const emailExists = emailCheck
@@ -85,7 +88,6 @@ const auth: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
 
         if (emailExists && emailCheck) {
           errors.push(`user with email "${email}" already exists`);
-          userExits = true;
         }
       } catch (error) {
         console.log(error);
@@ -104,7 +106,6 @@ const auth: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
           errors.push(
             `user with display_name "${display_name}" already exists`
           );
-          userExits = true;
         }
       } catch (error) {
         console.log(error);
@@ -114,7 +115,7 @@ const auth: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
         errors.push(`passwords do not match`);
 
       if (errors.length)
-        return reply.code(userExits ? 409 : 406).send({
+        return reply.code(emailCheck || passwordCheck ? 406 : 409).send({
           message: "Registration failed",
           errors,
         });
@@ -168,6 +169,16 @@ const auth: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
     const errors: string[] = [];
     const { email, password } = request.body;
 
+    // check for all required fields
+    if (!email || !email.length) errors.push("email is required");
+    if (!password || !password.length) errors.push("password is required");
+
+    if (errors.length)
+      return reply.code(400).send({
+        message: "Login failed",
+        errors,
+      });
+
     // verify email & password format
     const emailCheck = checkEmail(email);
     const passwordCheck = checkPassword(password);
@@ -177,6 +188,12 @@ const auth: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
       errors.push(
         "invalid password format 6+ characters, 1+ uppercase, 1+ symbols or number "
       );
+
+    if (errors.length)
+      return reply.code(406).send({
+        message: "Login failed",
+        errors,
+      });
 
     // check if user exists and verify password
     const auth = emailCheck
@@ -268,7 +285,6 @@ const auth: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
     async function (request, reply) {
       // @ts-ignore
       const authToken = request.user.token;
-      console.log({ authToken });
       try {
         const session = await prisma.session.update({
           where: {
@@ -278,9 +294,9 @@ const auth: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
             expired: true,
           },
         });
-        return {
+        return reply.code(session ? 200 : 500).send({
           message: session.expired ? "Logout successful" : "Logout failed",
-        };
+        });
       } catch (error) {
         console.log(error);
         return reply.internalServerError("Logout failed");
@@ -294,7 +310,8 @@ const auth: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
     async function (request, reply) {
       const errors: string[] = [];
       const { email } = request.body;
-      reply.badRequest();
+
+      if (!email) return reply.badRequest("email is required");
 
       // verify email & password format
       const emailCheck = checkEmail(email);
@@ -310,19 +327,19 @@ const auth: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
         : undefined;
 
       if (!emailExists) {
-        reply.conflict();
         errors.push(`user with email "${email}" doesn't exists`);
       }
 
       if (errors.length)
-        return {
+        return reply.code(!emailCheck ? 406 : 403).send({
+          message: "Failed",
           errors,
-        };
+        });
 
       try {
         const recovery = await prisma.authRecovery.create({
           data: {
-            token: randomBytes(256).toString("hex"),
+            token: uniqueToken(64),
             auth: {
               connect: {
                 email,
@@ -332,7 +349,7 @@ const auth: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
         });
         if (recovery)
           return {
-            token: recovery.token,
+            message: "token sent to your email",
           };
       } catch (error) {
         console.log(error);
@@ -410,6 +427,80 @@ const auth: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
       } catch (error) {
         console.log(error);
         return reply.internalServerError();
+      }
+    }
+  );
+
+  // user refresh auth
+  fastify.post<{ Body: { refreshToken: string } }>(
+    "/refresh",
+    async function (request, reply) {
+      const errors: string[] = [];
+      const { refreshToken } = request.body;
+      const { authorization } = request.headers;
+      const authToken = authorization?.startsWith("Bearer ")
+        ? authorization.split(" ")[1]
+        : undefined;
+
+      if (!authToken?.length) errors.push("authentication required");
+
+      if (!refreshToken?.length) errors.push("invalid session");
+
+      if (errors.length)
+        return reply.code(403).send({
+          message: "Failed",
+          errors,
+        });
+
+      const checkToken = JWT_Verifier(refreshToken);
+      if (!checkToken) errors.push("invalid or expired session token");
+      const tokenFromDb = checkToken
+        ? await prisma.session.findUnique({
+            where: {
+              token: refreshToken,
+              authToken,
+            },
+            include: { auth: true },
+          })
+        : undefined;
+      if (!tokenFromDb) errors.push("corrupted refresh token");
+      if (tokenFromDb?.authToken !== authToken)
+        errors.push("corrupted auth token");
+      if (errors.length)
+        return reply.code(checkToken ? 403 : 401).send({
+          message: "Failed",
+          errors,
+        });
+
+      try {
+        const updatedSession = await prisma.session.update({
+          where: {
+            token: tokenFromDb?.token,
+          },
+          data: {
+            authToken: await fastify.jwt.sign({
+              session: tokenFromDb?.id,
+              role: tokenFromDb?.auth.role,
+            }),
+          },
+          include: {
+            auth: true,
+          },
+        });
+
+        return reply.code(200).send({
+          authToken: updatedSession?.authToken,
+          refreshToken: tokenFromDb?.token,
+          user: {
+            ...tokenFromDb?.auth,
+            password: undefined,
+            deletedAt: undefined,
+            id: undefined,
+          },
+        });
+      } catch (error) {
+        console.log(error);
+        reply.internalServerError();
       }
     }
   );

@@ -14,13 +14,10 @@ CREATE TABLE "Auth" (
 
 -- CreateTable
 CREATE TABLE "AuthRecovery" (
-    "id" UUID NOT NULL,
     "authId" UUID NOT NULL,
     "token" TEXT NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "expired" BOOLEAN NOT NULL DEFAULT false,
-
-    CONSTRAINT "AuthRecovery_pkey" PRIMARY KEY ("id")
+    "expired" BOOLEAN NOT NULL DEFAULT false
 );
 
 -- CreateTable
@@ -58,11 +55,14 @@ CREATE TABLE "Contact" (
     "phone" VARCHAR(15) NOT NULL,
     "email" VARCHAR(500) NOT NULL,
     "address" TEXT NOT NULL,
+    "city" TEXT NOT NULL,
+    "state" TEXT NOT NULL,
+    "country" TEXT NOT NULL,
+    "zipcode" TEXT NOT NULL,
     "position" VARCHAR(100),
     "userId" UUID NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
-    "deletedAt" TIMESTAMP(3),
 
     CONSTRAINT "Contact_pkey" PRIMARY KEY ("id")
 );
@@ -133,7 +133,6 @@ CREATE TABLE "Review" (
     "workId" UUID NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
-    "deletedAt" TIMESTAMP(3),
 
     CONSTRAINT "Review_pkey" PRIMARY KEY ("id")
 );
@@ -163,7 +162,6 @@ CREATE TABLE "Favourite" (
     "postId" UUID,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
-    "deletedAt" TIMESTAMP(3),
 
     CONSTRAINT "Favourite_pkey" PRIMARY KEY ("id")
 );
@@ -180,7 +178,6 @@ CREATE TABLE "Reaction" (
     "messageId" UUID,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
-    "deletedAt" TIMESTAMP(3),
 
     CONSTRAINT "Reaction_pkey" PRIMARY KEY ("id")
 );
@@ -221,7 +218,6 @@ CREATE TABLE "Notification" (
     "readBy" UUID[],
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
-    "deletedAt" TIMESTAMP(3),
 
     CONSTRAINT "Notification_pkey" PRIMARY KEY ("id")
 );

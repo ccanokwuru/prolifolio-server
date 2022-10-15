@@ -1,5 +1,6 @@
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["fullTextSearch"]
 }
 
 datasource db {
@@ -18,11 +19,9 @@ model Auth {
   auth_recovery AuthRecovery[]
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
-  deletedAt     DateTime?
 }
 
 model AuthRecovery {
-  id        String   @id @default(uuid()) @db.Uuid
   auth      Auth     @relation(fields: [authId], references: [id])
   authId    String   @db.Uuid
   token     String   @unique
@@ -53,7 +52,6 @@ model User {
   favourites       Favourite[]
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
-  deletedAt        DateTime?
   reviews          Review[]
   reactions        Reaction[]
   posts            Post[]
@@ -69,17 +67,20 @@ model User {
 }
 
 model Contact {
-  id        String    @id @default(uuid()) @db.Uuid
-  type      String    @db.VarChar(20)
-  phone     String    @unique @db.VarChar(15)
-  email     String    @db.VarChar(500)
+  id        String   @id @default(uuid()) @db.Uuid
+  type      String?  @db.VarChar(20)
+  phone     String   @unique @db.VarChar(15)
+  email     String?  @db.VarChar(500)
   address   String
-  position  String?   @db.VarChar(100)
-  user      User      @relation(fields: [userId], references: [id])
-  userId    String    @db.Uuid
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  deletedAt DateTime?
+  city      String
+  state     String
+  country   String
+  zipcode   String
+  position  String?  @db.VarChar(100)
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String   @db.Uuid
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Creator {
@@ -109,7 +110,6 @@ model Category {
   p_categoryId String?    @db.Uuid
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
-  deletedAt    DateTime?
 }
 
 model Skill {
@@ -122,7 +122,6 @@ model Skill {
   creators    Creator[]
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
-  deletedAt   DateTime?
 }
 
 model Work {
@@ -147,71 +146,66 @@ model Work {
   userId      String?     @db.Uuid
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
-  deletedAt   DateTime?
 }
 
 model Review {
-  id        String    @id @default(uuid()) @db.Uuid
-  user      User      @relation(fields: [userId], references: [id])
+  id        String   @id @default(uuid()) @db.Uuid
+  user      User     @relation(fields: [userId], references: [id])
   comment   String?
   rating    Decimal
-  userId    String    @db.Uuid
-  work      Work      @relation(fields: [workId], references: [id])
-  workId    String    @db.Uuid
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  deletedAt DateTime?
+  userId    String   @db.Uuid
+  work      Work     @relation(fields: [workId], references: [id])
+  workId    String   @db.Uuid
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Order {
-  id          String    @id @default(uuid()) @db.Uuid
+  id          String   @id @default(uuid()) @db.Uuid
   description String?
-  collector   User      @relation(fields: [userId], references: [id])
-  status      String    @default("pending")
+  collector   User     @relation(fields: [userId], references: [id])
+  status      String   @default("pending")
   works       Work[]
   price       Decimal?
-  currency    String?   @db.VarChar(3)
-  userId      String    @db.Uuid
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  deletedAt   DateTime?
+  currency    String?  @db.VarChar(3)
+  userId      String   @db.Uuid
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 model Favourite {
-  id        String    @id @default(uuid()) @db.Uuid
-  work      Work?     @relation(fields: [workId], references: [id])
-  post      Post?     @relation(fields: [postId], references: [id])
-  user      User      @relation(fields: [userId], references: [id])
-  studio    Studio?   @relation(fields: [studioId], references: [id])
-  creator   Creator?  @relation(fields: [creatorId], references: [id])
-  creatorId String?   @db.Uuid
-  workId    String?   @db.Uuid
-  userId    String    @db.Uuid
-  studioId  String?   @db.Uuid
-  postId    String?   @db.Uuid
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  deletedAt DateTime?
+  id        String   @id @default(uuid()) @db.Uuid
+  work      Work?    @relation(fields: [workId], references: [id])
+  post      Post?    @relation(fields: [postId], references: [id])
+  user      User     @relation(fields: [userId], references: [id])
+  studio    Studio?  @relation(fields: [studioId], references: [id])
+  creator   Creator? @relation(fields: [creatorId], references: [id])
+  creatorId String?  @db.Uuid
+  workId    String?  @db.Uuid
+  userId    String   @db.Uuid
+  studioId  String?  @db.Uuid
+  postId    String?  @db.Uuid
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Reaction {
-  id        String    @id @default(uuid()) @db.Uuid
-  type      String    @unique @db.VarChar(15)
-  user      User      @relation(fields: [userId], references: [id])
-  userId    String    @db.Uuid
-  creator   Creator?  @relation(fields: [creatorId], references: [id])
-  creatorId String?   @db.Uuid
-  post      Post?     @relation(fields: [postId], references: [id])
-  postId    String?   @db.Uuid
-  pork      Work?     @relation(fields: [workId], references: [id])
-  workId    String?   @db.Uuid
-  studio    Studio?   @relation(fields: [studioId], references: [id])
-  studioId  String?   @db.Uuid
-  message   Message?  @relation(fields: [messageId], references: [id])
-  messageId String?   @db.Uuid
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  deletedAt DateTime?
+  id        String   @id @default(uuid()) @db.Uuid
+  type      String   @unique @db.VarChar(15)
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String   @db.Uuid
+  creator   Creator? @relation(fields: [creatorId], references: [id])
+  creatorId String?  @db.Uuid
+  post      Post?    @relation(fields: [postId], references: [id])
+  postId    String?  @db.Uuid
+  pork      Work?    @relation(fields: [workId], references: [id])
+  workId    String?  @db.Uuid
+  studio    Studio?  @relation(fields: [studioId], references: [id])
+  studioId  String?  @db.Uuid
+  message   Message? @relation(fields: [messageId], references: [id])
+  messageId String?  @db.Uuid
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Studio {
@@ -225,7 +219,6 @@ model Studio {
   reactions   Reaction[]
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
-  deletedAt   DateTime?
 }
 
 model Job {
@@ -239,19 +232,17 @@ model Job {
   ownerId     String    @db.Uuid
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
-  deletedAt   DateTime?
 }
 
 model Notification {
-  id        String    @id @default(uuid()) @db.Uuid
+  id        String   @id @default(uuid()) @db.Uuid
   message   String
   read      Boolean
-  type      String?   @default("single")
+  type      String?  @default("single")
   users     User[]
-  readBy    String[]  @db.Uuid
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  deletedAt DateTime?
+  readBy    String[] @db.Uuid
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Message {
@@ -269,7 +260,6 @@ model Message {
   read        Boolean    @default(false)
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
-  deletedAt   DateTime?
 }
 
 model Post {
@@ -300,5 +290,4 @@ model Comment {
   comments    Comment[] @relation("CommentToComment")
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
-  deletedAt   DateTime?
 }
