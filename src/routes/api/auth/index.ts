@@ -1,6 +1,5 @@
-import { AuthRecovery, PrismaClient, User } from "@prisma/client";
+import { PrismaClient, Profile } from "@prisma/client";
 import { FastifyPluginAsync } from "fastify";
-import { ROLE } from "../../../types";
 import {
   checkEmail,
   checkPassword,
@@ -15,7 +14,7 @@ interface LoginI {
   password: string;
 }
 
-interface RegisterI extends User {
+interface RegisterI extends Profile {
   email: string;
   password: string;
   confirm_password: string;
@@ -70,6 +69,9 @@ const auth: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
           "invalid password format 6+ characters, 1+ uppercase, 1+ symbols or number "
         );
 
+      if (!checkMatchPassword(password, confirm_password))
+        errors.push(`passwords do not match`);
+
       if (errors.length)
         return reply.code(406).send({
           message: "Registration failed",
@@ -79,25 +81,26 @@ const auth: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
       // check if user exits aready
       try {
         const emailExists = emailCheck
-          ? await prisma.auth.findFirst({
+          ? await prisma.user.findFirst({
               where: {
-                email: email,
+                email: {
+                  equals: email,
+                  mode: "insensitive",
+                },
               },
             })
           : undefined;
 
-        if (emailExists && emailCheck) {
+        if (emailExists && emailCheck)
           errors.push(`user with email "${email}" already exists`);
-        }
-      } catch (error) {
-        console.log(error);
-      }
 
-      try {
         const displayNameExists = emailCheck
-          ? await prisma.user.findFirst({
+          ? await prisma.profile.findFirst({
               where: {
-                display_name,
+                display_name: {
+                  equals: display_name,
+                  mode: "insensitive",
+                },
               },
             })
           : undefined;
@@ -111,9 +114,6 @@ const auth: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
         console.log(error);
       }
 
-      if (!checkMatchPassword(password, confirm_password))
-        errors.push(`passwords do not match`);
-
       if (errors.length)
         return reply.code(emailCheck || passwordCheck ? 406 : 409).send({
           message: "Registration failed",
@@ -122,40 +122,35 @@ const auth: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
 
       // create the user
       try {
-        const user = await prisma.auth.create({
+        const user = await prisma.user.create({
           data: {
             email: email,
             password: await fastify.bcrypt.hash(password),
-            user: {
+            role: is_artist ? "artist" : "user",
+            profile: {
               create: {
                 display_name,
-                role: is_artist ? ROLE.ARTIST : ROLE.USER,
                 first_name,
                 last_name,
+                artist: is_artist
+                  ? {
+                      create: {},
+                    }
+                  : {},
               },
             },
           },
-          include: { user: true },
+          select: {
+            email: true,
+            id: true,
+            role: true,
+            profile: true,
+          },
         });
-        if (user)
-          if (is_artist) {
-            await prisma.creator.create({
-              data: {
-                userId: user.user.id,
-              },
-            });
-          }
+
         return reply.code(201).send({
           message: "Registration successfull",
-          user: {
-            ...user,
-            password: undefined,
-            deletedAt: undefined,
-            user: {
-              ...user.user,
-              deletedAt: undefined,
-            },
-          },
+          user,
         });
       } catch (error) {
         console.log(error);
@@ -196,26 +191,29 @@ const auth: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
       });
 
     // check if user exists and verify password
-    const auth = emailCheck
-      ? await prisma.auth.findUnique({
+    const user = emailCheck
+      ? await prisma.user.findFirst({
           where: {
-            email: email,
+            email: {
+              equals: email,
+              mode: "insensitive",
+            },
           },
         })
       : undefined;
 
-    const verifyPassword = auth
-      ? await fastify.bcrypt.compare(password, auth.password)
+    const verifyPassword = user
+      ? await fastify.bcrypt.compare(password, user.password)
       : false;
 
-    !auth || auth.deletedAt
+    !user
       ? errors.push("user does not exist")
       : !verifyPassword
       ? errors.push("invalid user credentials")
       : null;
 
     if (errors.length)
-      return reply.code(auth && !verifyPassword ? 409 : 403).send({
+      return reply.code(user && !verifyPassword ? 409 : 403).send({
         message: "Login failed",
         errors,
       });
@@ -224,14 +222,14 @@ const auth: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
     const refreshToken = JWT_Signer({
       email: email,
       client: request.headers["user-agent"],
-      role: auth?.role,
+      role: user?.role,
     });
 
     try {
       const session = await prisma.session.create({
         data: {
           token: refreshToken,
-          auth: {
+          user: {
             connect: {
               email: email,
             },
@@ -241,28 +239,33 @@ const auth: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
 
       const authToken = fastify.jwt.sign({
         session: session.id,
-        role: auth?.role,
+        role: user?.role,
       });
 
-      const user = await prisma.session.update({
+      const sessionUpdate = await prisma.session.update({
         where: {
           id: session.id,
         },
         data: {
           authToken,
         },
-        include: { auth: true },
+        include: {
+          user: {
+            select: {
+              email: true,
+              id: true,
+              role: true,
+              createdAt: true,
+              updatedAt: true,
+            },
+          },
+        },
       });
 
       return reply.code(200).send({
         authToken,
         refreshToken,
-        user: {
-          ...user.auth,
-          password: undefined,
-          deletedAt: undefined,
-          id: undefined,
-        },
+        user: sessionUpdate.user,
       });
     } catch (error) {
       console.log(error);
@@ -306,7 +309,7 @@ const auth: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
 
   // user forgot password request for token
   fastify.post<{ Body: { email: string } }>(
-    "/forget-password",
+    "/forgotten-password",
     async function (request, reply) {
       const errors: string[] = [];
       const { email } = request.body;
@@ -319,7 +322,7 @@ const auth: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
 
       // check email on db
       const emailExists = emailCheck
-        ? await prisma.auth.findUnique({
+        ? await prisma.user.findUnique({
             where: {
               email,
             },
@@ -340,7 +343,7 @@ const auth: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
         const recovery = await prisma.authRecovery.create({
           data: {
             token: uniqueToken(64),
-            auth: {
+            user: {
               connect: {
                 email,
               },
@@ -350,6 +353,7 @@ const auth: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
         if (recovery)
           return {
             message: "token sent to your email",
+            token: recovery,
           };
       } catch (error) {
         console.log(error);
@@ -364,6 +368,7 @@ const auth: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
     async function (request, reply) {
       const errors: string[] = [];
       const { email, password, confirm_password, token } = request.body;
+      const _tokenExpires = new Date(new Date(Date.now()).getTime() - 8.64e7);
 
       // verify email & password format
       const emailCheck = checkEmail(email);
@@ -378,56 +383,82 @@ const auth: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
       if (!checkMatchPassword(password, confirm_password))
         errors.push(`passwords do not match`);
 
+      if (errors.length)
+        return reply.code(406).send({
+          message: "failed",
+          errors,
+        });
+
       // check email on db
-      const emailExists = emailCheck
-        ? await prisma.auth.findUnique({
-            where: {
-              email,
-            },
-          })
-        : undefined;
+      const emailExists = await prisma.user.findUnique({
+        where: {
+          email,
+        },
+      });
 
       if (!emailExists)
         errors.push(`user with email "${email}" doesn't exists`);
 
-      let checkToken: AuthRecovery | null = null;
-
+      // check token on db and update paswword
       try {
-        checkToken = await prisma.authRecovery.findUnique({
-          where: {
-            token,
-          },
-        });
+        const checkToken = emailExists
+          ? await prisma.authRecovery.findFirst({
+              where: {
+                token,
+                createdAt: {
+                  gte: _tokenExpires,
+                },
+                expired: {
+                  not: {
+                    equals: true,
+                  },
+                },
+              },
+            })
+          : undefined;
 
-        const tokenExpired = checkToken
-          ? new Date(checkToken?.createdAt).getTime() <
-            new Date(Date.now()).getTime() - 3600000 * 24
-          : true;
+        const user = checkToken
+          ? await prisma.authRecovery.update({
+              where: { token },
+              data: {
+                expired: true,
+                user: {
+                  update: checkToken
+                    ? {
+                        password: await fastify.bcrypt.hash(password),
+                      }
+                    : {},
+                },
+              },
+              select: {
+                user: {
+                  select: {
+                    id: true,
+                    email: true,
+                    role: true,
+                    createdAt: true,
+                    updatedAt: true,
+                  },
+                },
+              },
+            })
+          : undefined;
 
-        if (!checkToken || tokenExpired)
-          errors.push("invalid or expired token");
-      } catch (error) {
-        console.log(error);
-      }
-
-      if (errors.length)
-        return {
-          errors,
-        };
-
-      try {
-        const user = await prisma.auth.update({
-          where: { id: checkToken?.authId },
-          data: {
-            password: await fastify.bcrypt.hash(password),
-          },
-        });
-
-        return user;
+        if (user)
+          return {
+            message: "successful",
+            user: user,
+          };
+        errors.push("invalid or expired token");
       } catch (error) {
         console.log(error);
         return reply.internalServerError();
       }
+
+      return reply.code(404).send({
+        message: "failed",
+        errors,
+      });
     }
   );
 
@@ -454,25 +485,25 @@ const auth: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
 
       const checkToken = JWT_Verifier(refreshToken);
       if (!checkToken) errors.push("invalid or expired session token");
-      const tokenFromDb = checkToken
-        ? await prisma.session.findUnique({
-            where: {
-              token: refreshToken,
-              authToken,
-            },
-            include: { auth: true },
-          })
-        : undefined;
-      if (!tokenFromDb) errors.push("corrupted refresh token");
-      if (tokenFromDb?.authToken !== authToken)
-        errors.push("corrupted auth token");
-      if (errors.length)
-        return reply.code(checkToken ? 403 : 401).send({
-          message: "Failed",
-          errors,
-        });
-
       try {
+        const tokenFromDb = checkToken
+          ? await prisma.session.findUnique({
+              where: {
+                token: refreshToken,
+                authToken,
+              },
+              include: { user: true },
+            })
+          : undefined;
+        if (!tokenFromDb) errors.push("corrupted refresh token");
+        if (tokenFromDb?.authToken !== authToken)
+          errors.push("corrupted auth token");
+        if (errors.length)
+          return reply.code(checkToken ? 403 : 401).send({
+            message: "Failed",
+            errors,
+          });
+
         const updatedSession = await prisma.session.update({
           where: {
             token: tokenFromDb?.token,
@@ -480,23 +511,28 @@ const auth: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
           data: {
             authToken: await fastify.jwt.sign({
               session: tokenFromDb?.id,
-              role: tokenFromDb?.auth.role,
+              role: tokenFromDb?.user?.role,
             }),
           },
-          include: {
-            auth: true,
+          select: {
+            authToken: true,
+            token: true,
+            user: {
+              select: {
+                id: true,
+                email: true,
+                role: true,
+                createdAt: true,
+                updatedAt: true,
+              },
+            },
           },
         });
 
         return reply.code(200).send({
           authToken: updatedSession?.authToken,
-          refreshToken: tokenFromDb?.token,
-          user: {
-            ...tokenFromDb?.auth,
-            password: undefined,
-            deletedAt: undefined,
-            id: undefined,
-          },
+          refreshToken: updatedSession?.token,
+          user: updatedSession?.user,
         });
       } catch (error) {
         console.log(error);

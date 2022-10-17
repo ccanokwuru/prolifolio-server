@@ -8,13 +8,13 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model Auth {
+model User {
   id            String         @id @default(uuid()) @db.Uuid
   email         String         @unique @db.VarChar(200)
   password      String         @db.VarChar(255)
-  user          User           @relation(fields: [userId], references: [id])
-  userId        String         @unique @db.Uuid
-  role          String         @default("user") @db.VarChar(7)
+  profile       Profile        @relation(fields: [profileId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  profileId     String         @unique @db.Uuid
+  role          ROLE           @default(user)
   session       Session[]
   auth_recovery AuthRecovery[]
   createdAt     DateTime       @default(now())
@@ -22,8 +22,8 @@ model Auth {
 }
 
 model AuthRecovery {
-  auth      Auth     @relation(fields: [authId], references: [id])
-  authId    String   @db.Uuid
+  user      User     @relation(fields: [userId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  userId    String   @db.Uuid
   token     String   @unique
   createdAt DateTime @default(now())
   expired   Boolean  @default(false)
@@ -34,12 +34,12 @@ model Session {
   token     String   @unique @db.VarChar(500)
   authToken String?  @unique @db.VarChar(500)
   createdAt DateTime @default(now())
-  auth      Auth     @relation(fields: [authId], references: [id])
-  authId    String   @db.Uuid
+  user      User     @relation(fields: [userId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  userId    String   @db.Uuid
   expired   Boolean  @default(false)
 }
 
-model User {
+model Profile {
   id               String         @id @default(uuid()) @db.Uuid
   first_name       String         @db.VarChar(200)
   last_name        String         @db.VarChar(200)
@@ -48,27 +48,26 @@ model User {
   display_name     String?        @unique @db.VarChar(200)
   interests        Skill[]
   contacts         Contact[]
-  creator          Creator?
+  artist           Artist?
   favourites       Favourite[]
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
   reviews          Review[]
   reactions        Reaction[]
-  posts            Post[]
   comments         Comment[]
-  role             String         @default("user") @db.VarChar(20)
+  posts            Post[]
   jobs             Job[]
   orders           Order[]
   wishlist         Work[]
   messagesRecieved Message[]      @relation("Recieved")
   messagesSent     Message[]      @relation("Sent")
   notifications    Notification[]
-  auth             Auth?
+  user             User?
 }
 
 model Contact {
   id        String   @id @default(uuid()) @db.Uuid
-  type      String?  @db.VarChar(20)
+  type      CONTACT?
   phone     String   @unique @db.VarChar(15)
   email     String?  @db.VarChar(500)
   address   String
@@ -77,21 +76,21 @@ model Contact {
   country   String
   zipcode   String
   position  String?  @db.VarChar(100)
-  user      User     @relation(fields: [userId], references: [id])
-  userId    String   @db.Uuid
+  user      Profile? @relation(fields: [ownerId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  ownerId   String?  @db.Uuid
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
-model Creator {
+model Artist {
   id         String      @id @default(uuid()) @db.Uuid
-  user       User        @relation(fields: [userId], references: [id])
+  profile    Profile?    @relation(fields: [profileId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   works      Work[]
   skills     Skill[]
   jobs       Job[]
   studio     Studio?
   favourites Favourite[]
-  userId     String      @unique @db.Uuid
+  profileId  String?     @unique @db.Uuid
   reactions  Reaction[]
   createdAt  DateTime    @default(now())
   updatedAt  DateTime    @updatedAt
@@ -106,7 +105,7 @@ model Category {
   works        Work[]
   jobs         Job[]
   description  String?
-  p_category   Category?  @relation("CategoryToCategory", fields: [p_categoryId], references: [id])
+  p_category   Category?  @relation("CategoryToCategory", fields: [p_categoryId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   p_categoryId String?    @db.Uuid
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
@@ -114,12 +113,13 @@ model Category {
 
 model Skill {
   id          String    @id @default(uuid()) @db.Uuid
-  name        String
-  category    Category  @relation(fields: [categoryId], references: [id])
-  categoryId  String    @db.Uuid
+  name        String    @unique @db.VarChar(100)
+  category    Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  categoryId  String?   @db.Uuid
   description String?
-  users       User[]
-  creators    Creator[]
+  users       Profile[]
+  artists     Artist[]
+  works       Work[]
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 }
@@ -127,43 +127,47 @@ model Skill {
 model Work {
   id          String      @id @default(uuid()) @db.Uuid
   title       String      @db.VarChar(200)
-  category    Category    @relation(fields: [categoryId], references: [id])
+  category    Category    @relation(fields: [categoryId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   categoryId  String      @db.Uuid
   description String?
-  creator     Creator     @relation(fields: [creatorId], references: [id])
+  artist      Artist      @relation(fields: [artistId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  artistId    String      @db.Uuid
   favourites  Favourite[]
-  studio      Studio?     @relation(fields: [studioId], references: [id])
+  studio      Studio?     @relation(fields: [studioId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   studioId    String?     @db.Uuid
   reviews     Review[]
   orders      Order[]
   price       Decimal?    @db.Money
   currency    String?     @default("NGN") @db.VarChar(3)
-  sellAs      String?     @db.VarChar(15)
-  creatorId   String      @db.Uuid
+  sellAs      SELLAS[]    @default([buy_now])
   reactions   Reaction[]
+  skills      Skill[]
   files       Json?
-  User        User?       @relation(fields: [userId], references: [id])
-  userId      String?     @db.Uuid
+  wishlists   Profile[]
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 }
 
 model Review {
   id        String   @id @default(uuid()) @db.Uuid
-  user      User     @relation(fields: [userId], references: [id])
+  user      Profile  @relation(fields: [userId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  userId    String   @db.Uuid
   comment   String?
   rating    Decimal
-  userId    String   @db.Uuid
-  work      Work     @relation(fields: [workId], references: [id])
+  work      Work     @relation(fields: [workId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   workId    String   @db.Uuid
+  parent    Review?  @relation(fields: [parentId], references: [id], name: "ReplyToComment", onDelete: SetNull, onUpdate: Cascade)
+  parentId  String?  @db.Uuid
+  replies   Review[] @relation("ReplyToComment")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  reviewId  String?  @db.Uuid
 }
 
 model Order {
   id          String   @id @default(uuid()) @db.Uuid
   description String?
-  collector   User     @relation(fields: [userId], references: [id])
+  user        Profile  @relation(fields: [userId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   status      String   @default("pending")
   works       Work[]
   price       Decimal?
@@ -175,16 +179,16 @@ model Order {
 
 model Favourite {
   id        String   @id @default(uuid()) @db.Uuid
-  work      Work?    @relation(fields: [workId], references: [id])
-  post      Post?    @relation(fields: [postId], references: [id])
-  user      User     @relation(fields: [userId], references: [id])
-  studio    Studio?  @relation(fields: [studioId], references: [id])
-  creator   Creator? @relation(fields: [creatorId], references: [id])
-  creatorId String?  @db.Uuid
+  work      Work?    @relation(fields: [workId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   workId    String?  @db.Uuid
-  userId    String   @db.Uuid
-  studioId  String?  @db.Uuid
+  post      Post?    @relation(fields: [postId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   postId    String?  @db.Uuid
+  user      Profile  @relation(fields: [userId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  userId    String   @db.Uuid
+  studio    Studio?  @relation(fields: [studioId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  studioId  String?  @db.Uuid
+  artist    Artist?  @relation(fields: [artistId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  artistId  String?  @db.Uuid
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -192,17 +196,17 @@ model Favourite {
 model Reaction {
   id        String   @id @default(uuid()) @db.Uuid
   type      String   @unique @db.VarChar(15)
-  user      User     @relation(fields: [userId], references: [id])
+  user      Profile  @relation(fields: [userId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   userId    String   @db.Uuid
-  creator   Creator? @relation(fields: [creatorId], references: [id])
-  creatorId String?  @db.Uuid
-  post      Post?    @relation(fields: [postId], references: [id])
+  artist    Artist?  @relation(fields: [artistId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  artistId  String?  @db.Uuid
+  post      Post?    @relation(fields: [postId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   postId    String?  @db.Uuid
-  pork      Work?    @relation(fields: [workId], references: [id])
+  work      Work?    @relation(fields: [workId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   workId    String?  @db.Uuid
-  studio    Studio?  @relation(fields: [studioId], references: [id])
+  studio    Studio?  @relation(fields: [studioId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   studioId  String?  @db.Uuid
-  message   Message? @relation(fields: [messageId], references: [id])
+  message   Message? @relation(fields: [messageId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   messageId String?  @db.Uuid
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -212,49 +216,47 @@ model Studio {
   id          String      @id @default(uuid()) @db.Uuid
   name        String      @unique @db.VarChar(100)
   description String?
-  creator     Creator     @relation(fields: [creatorId], references: [id])
+  artist      Artist      @relation(fields: [artistId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  artistId    String      @unique @db.Uuid
   works       Work[]
   favourites  Favourite[]
-  creatorId   String      @unique @db.Uuid
   reactions   Reaction[]
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 }
 
 model Job {
-  id          String    @id @default(uuid()) @db.Uuid
-  title       String    @db.VarChar(200)
-  category    Category  @relation(fields: [categoryId], references: [id])
-  categoryId  String    @db.Uuid
+  id          String   @id @default(uuid()) @db.Uuid
+  title       String   @db.VarChar(200)
+  category    Category @relation(fields: [categoryId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  categoryId  String   @db.Uuid
   description String?
-  owner       User      @relation(fields: [ownerId], references: [id])
-  applicants  Creator[]
-  ownerId     String    @db.Uuid
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  owner       Profile  @relation(fields: [ownerId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  applicants  Artist[]
+  ownerId     String   @db.Uuid
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 model Notification {
-  id        String   @id @default(uuid()) @db.Uuid
+  id        String       @id @default(uuid()) @db.Uuid
   message   String
-  read      Boolean
-  type      String?  @default("single")
-  users     User[]
-  readBy    String[] @db.Uuid
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  type      NOTIFICATION @default(single)
+  users     Profile[]
+  readBy    String[]     @db.Uuid
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
 }
 
 model Message {
   id          String     @id @default(uuid()) @db.Uuid
-  to          User       @relation("Recieved", fields: [toId], references: [id])
-  from        User?      @relation("Sent", fields: [fromId], references: [id])
-  fromId      String?    @db.Uuid
+  to          Profile    @relation("Recieved", fields: [toId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   toId        String     @db.Uuid
+  from        Profile?   @relation("Sent", fields: [fromId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  fromId      String?    @db.Uuid
   message     String
-  type        String     @default("chat")
   replies     Message[]  @relation("ReplyToMessage")
-  p_message   Message?   @relation("ReplyToMessage", fields: [p_messageId], references: [id])
+  p_message   Message?   @relation("ReplyToMessage", fields: [p_messageId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   p_messageId String?    @db.Uuid
   reactions   Reaction[]
   read        Boolean    @default(false)
@@ -268,7 +270,7 @@ model Post {
   title      String      @db.VarChar(200)
   content    String
   thumbnail  String?     @db.VarChar(500)
-  author     User        @relation(fields: [authorId], references: [id])
+  author     Profile     @relation(fields: [authorId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   authorId   String      @db.Uuid
   comments   Comment[]
   favourites Favourite[]
@@ -279,15 +281,39 @@ model Post {
 }
 
 model Comment {
-  id          String    @id @default(uuid()) @db.Uuid
-  post        Post?     @relation(fields: [postId], references: [id])
-  postId      String?   @db.Uuid
-  p_comment   Comment?  @relation(fields: [p_commentId], references: [id], name: "CommentToComment")
-  p_commentId String?   @db.Uuid
-  message     String
-  user        User      @relation(fields: [userId], references: [id])
-  userId      String    @db.Uuid
-  comments    Comment[] @relation("CommentToComment")
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id        String    @id @default(uuid()) @db.Uuid
+  post      Post      @relation(fields: [postId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  postId    String    @db.Uuid
+  parent    Comment?  @relation(fields: [parentId], references: [id], name: "CommentToComment", onDelete: SetNull, onUpdate: Cascade)
+  parentId  String?   @db.Uuid
+  message   String
+  user      Profile   @relation(fields: [userId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  userId    String    @db.Uuid
+  comments  Comment[] @relation("CommentToComment")
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+enum ROLE {
+  user
+  artist
+  admin
+}
+
+enum NOTIFICATION {
+  single
+  multiple
+  broadcast
+}
+
+enum CONTACT {
+  default
+  residential
+  office
+}
+
+enum SELLAS {
+  bidding
+  best_offer
+  buy_now
 }

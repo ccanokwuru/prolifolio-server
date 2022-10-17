@@ -1,20 +1,31 @@
+-- CreateEnum
+CREATE TYPE "ROLE" AS ENUM ('user', 'artist', 'admin');
+
+-- CreateEnum
+CREATE TYPE "NOTIFICATION" AS ENUM ('single', 'multiple', 'broadcast');
+
+-- CreateEnum
+CREATE TYPE "CONTACT" AS ENUM ('default', 'residential', 'office');
+
+-- CreateEnum
+CREATE TYPE "SELLAS" AS ENUM ('bidding', 'best_offer', 'buy_now');
+
 -- CreateTable
-CREATE TABLE "Auth" (
+CREATE TABLE "User" (
     "id" UUID NOT NULL,
     "email" VARCHAR(200) NOT NULL,
     "password" VARCHAR(255) NOT NULL,
-    "userId" UUID NOT NULL,
-    "role" VARCHAR(7) NOT NULL DEFAULT 'user',
+    "profileId" UUID NOT NULL,
+    "role" "ROLE" NOT NULL DEFAULT 'user',
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
-    "deletedAt" TIMESTAMP(3),
 
-    CONSTRAINT "Auth_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "User_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "AuthRecovery" (
-    "authId" UUID NOT NULL,
+    "userId" UUID NOT NULL,
     "token" TEXT NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "expired" BOOLEAN NOT NULL DEFAULT false
@@ -26,14 +37,14 @@ CREATE TABLE "Session" (
     "token" VARCHAR(500) NOT NULL,
     "authToken" VARCHAR(500),
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "authId" UUID NOT NULL,
+    "userId" UUID NOT NULL,
     "expired" BOOLEAN NOT NULL DEFAULT false,
 
     CONSTRAINT "Session_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
-CREATE TABLE "User" (
+CREATE TABLE "Profile" (
     "id" UUID NOT NULL,
     "first_name" VARCHAR(200) NOT NULL,
     "last_name" VARCHAR(200) NOT NULL,
@@ -42,25 +53,23 @@ CREATE TABLE "User" (
     "display_name" VARCHAR(200),
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
-    "deletedAt" TIMESTAMP(3),
-    "role" VARCHAR(20) NOT NULL DEFAULT 'user',
 
-    CONSTRAINT "User_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "Profile_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "Contact" (
     "id" UUID NOT NULL,
-    "type" VARCHAR(20) NOT NULL,
+    "type" "CONTACT",
     "phone" VARCHAR(15) NOT NULL,
-    "email" VARCHAR(500) NOT NULL,
+    "email" VARCHAR(500),
     "address" TEXT NOT NULL,
     "city" TEXT NOT NULL,
     "state" TEXT NOT NULL,
     "country" TEXT NOT NULL,
     "zipcode" TEXT NOT NULL,
     "position" VARCHAR(100),
-    "userId" UUID NOT NULL,
+    "ownerId" UUID,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -68,14 +77,14 @@ CREATE TABLE "Contact" (
 );
 
 -- CreateTable
-CREATE TABLE "Creator" (
+CREATE TABLE "Artist" (
     "id" UUID NOT NULL,
-    "userId" UUID NOT NULL,
+    "profileId" UUID,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
     "deletedAt" TIMESTAMP(3),
 
-    CONSTRAINT "Creator_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "Artist_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -86,7 +95,6 @@ CREATE TABLE "Category" (
     "p_categoryId" UUID,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
-    "deletedAt" TIMESTAMP(3),
 
     CONSTRAINT "Category_pkey" PRIMARY KEY ("id")
 );
@@ -94,12 +102,11 @@ CREATE TABLE "Category" (
 -- CreateTable
 CREATE TABLE "Skill" (
     "id" UUID NOT NULL,
-    "name" TEXT NOT NULL,
-    "categoryId" UUID NOT NULL,
+    "name" VARCHAR(100) NOT NULL,
+    "categoryId" UUID,
     "description" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
-    "deletedAt" TIMESTAMP(3),
 
     CONSTRAINT "Skill_pkey" PRIMARY KEY ("id")
 );
@@ -110,16 +117,14 @@ CREATE TABLE "Work" (
     "title" VARCHAR(200) NOT NULL,
     "categoryId" UUID NOT NULL,
     "description" TEXT,
+    "artistId" UUID NOT NULL,
     "studioId" UUID,
     "price" MONEY,
     "currency" VARCHAR(3) DEFAULT 'NGN',
-    "sellAs" VARCHAR(15),
-    "creatorId" UUID NOT NULL,
+    "sellAs" "SELLAS"[] DEFAULT ARRAY['buy_now']::"SELLAS"[],
     "files" JSONB,
-    "userId" UUID,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
-    "deletedAt" TIMESTAMP(3),
 
     CONSTRAINT "Work_pkey" PRIMARY KEY ("id")
 );
@@ -127,12 +132,14 @@ CREATE TABLE "Work" (
 -- CreateTable
 CREATE TABLE "Review" (
     "id" UUID NOT NULL,
+    "userId" UUID NOT NULL,
     "comment" TEXT,
     "rating" DECIMAL(65,30) NOT NULL,
-    "userId" UUID NOT NULL,
     "workId" UUID NOT NULL,
+    "parentId" UUID,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
+    "reviewId" UUID,
 
     CONSTRAINT "Review_pkey" PRIMARY KEY ("id")
 );
@@ -147,7 +154,6 @@ CREATE TABLE "Order" (
     "userId" UUID NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
-    "deletedAt" TIMESTAMP(3),
 
     CONSTRAINT "Order_pkey" PRIMARY KEY ("id")
 );
@@ -155,11 +161,11 @@ CREATE TABLE "Order" (
 -- CreateTable
 CREATE TABLE "Favourite" (
     "id" UUID NOT NULL,
-    "creatorId" UUID,
     "workId" UUID,
+    "postId" UUID,
     "userId" UUID NOT NULL,
     "studioId" UUID,
-    "postId" UUID,
+    "artistId" UUID,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -171,7 +177,7 @@ CREATE TABLE "Reaction" (
     "id" UUID NOT NULL,
     "type" VARCHAR(15) NOT NULL,
     "userId" UUID NOT NULL,
-    "creatorId" UUID,
+    "artistId" UUID,
     "postId" UUID,
     "workId" UUID,
     "studioId" UUID,
@@ -187,10 +193,9 @@ CREATE TABLE "Studio" (
     "id" UUID NOT NULL,
     "name" VARCHAR(100) NOT NULL,
     "description" TEXT,
-    "creatorId" UUID NOT NULL,
+    "artistId" UUID NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
-    "deletedAt" TIMESTAMP(3),
 
     CONSTRAINT "Studio_pkey" PRIMARY KEY ("id")
 );
@@ -204,7 +209,6 @@ CREATE TABLE "Job" (
     "ownerId" UUID NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
-    "deletedAt" TIMESTAMP(3),
 
     CONSTRAINT "Job_pkey" PRIMARY KEY ("id")
 );
@@ -213,8 +217,7 @@ CREATE TABLE "Job" (
 CREATE TABLE "Notification" (
     "id" UUID NOT NULL,
     "message" TEXT NOT NULL,
-    "read" BOOLEAN NOT NULL,
-    "type" TEXT DEFAULT 'single',
+    "type" "NOTIFICATION" NOT NULL DEFAULT 'single',
     "readBy" UUID[],
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
@@ -225,15 +228,13 @@ CREATE TABLE "Notification" (
 -- CreateTable
 CREATE TABLE "Message" (
     "id" UUID NOT NULL,
-    "fromId" UUID,
     "toId" UUID NOT NULL,
+    "fromId" UUID,
     "message" TEXT NOT NULL,
-    "type" TEXT NOT NULL DEFAULT 'chat',
     "p_messageId" UUID,
     "read" BOOLEAN NOT NULL DEFAULT false,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
-    "deletedAt" TIMESTAMP(3),
 
     CONSTRAINT "Message_pkey" PRIMARY KEY ("id")
 );
@@ -256,31 +257,42 @@ CREATE TABLE "Post" (
 -- CreateTable
 CREATE TABLE "Comment" (
     "id" UUID NOT NULL,
-    "postId" UUID,
-    "p_commentId" UUID,
+    "postId" UUID NOT NULL,
+    "parentId" UUID,
     "message" TEXT NOT NULL,
     "userId" UUID NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
-    "deletedAt" TIMESTAMP(3),
 
     CONSTRAINT "Comment_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
-CREATE TABLE "_CreatorToSkill" (
+CREATE TABLE "_ProfileToSkill" (
     "A" UUID NOT NULL,
     "B" UUID NOT NULL
 );
 
 -- CreateTable
-CREATE TABLE "_CreatorToJob" (
+CREATE TABLE "_ProfileToWork" (
     "A" UUID NOT NULL,
     "B" UUID NOT NULL
 );
 
 -- CreateTable
-CREATE TABLE "_SkillToUser" (
+CREATE TABLE "_ArtistToSkill" (
+    "A" UUID NOT NULL,
+    "B" UUID NOT NULL
+);
+
+-- CreateTable
+CREATE TABLE "_ArtistToJob" (
+    "A" UUID NOT NULL,
+    "B" UUID NOT NULL
+);
+
+-- CreateTable
+CREATE TABLE "_SkillToWork" (
     "A" UUID NOT NULL,
     "B" UUID NOT NULL
 );
@@ -292,16 +304,16 @@ CREATE TABLE "_OrderToWork" (
 );
 
 -- CreateTable
-CREATE TABLE "_NotificationToUser" (
+CREATE TABLE "_NotificationToProfile" (
     "A" UUID NOT NULL,
     "B" UUID NOT NULL
 );
 
 -- CreateIndex
-CREATE UNIQUE INDEX "Auth_email_key" ON "Auth"("email");
+CREATE UNIQUE INDEX "User_email_key" ON "User"("email");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "Auth_userId_key" ON "Auth"("userId");
+CREATE UNIQUE INDEX "User_profileId_key" ON "User"("profileId");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "AuthRecovery_token_key" ON "AuthRecovery"("token");
@@ -313,16 +325,19 @@ CREATE UNIQUE INDEX "Session_token_key" ON "Session"("token");
 CREATE UNIQUE INDEX "Session_authToken_key" ON "Session"("authToken");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "User_display_name_key" ON "User"("display_name");
+CREATE UNIQUE INDEX "Profile_display_name_key" ON "Profile"("display_name");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "Contact_phone_key" ON "Contact"("phone");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "Creator_userId_key" ON "Creator"("userId");
+CREATE UNIQUE INDEX "Artist_profileId_key" ON "Artist"("profileId");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "Category_name_key" ON "Category"("name");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Skill_name_key" ON "Skill"("name");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "Reaction_type_key" ON "Reaction"("type");
@@ -331,28 +346,40 @@ CREATE UNIQUE INDEX "Reaction_type_key" ON "Reaction"("type");
 CREATE UNIQUE INDEX "Studio_name_key" ON "Studio"("name");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "Studio_creatorId_key" ON "Studio"("creatorId");
+CREATE UNIQUE INDEX "Studio_artistId_key" ON "Studio"("artistId");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "Post_slug_key" ON "Post"("slug");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "_CreatorToSkill_AB_unique" ON "_CreatorToSkill"("A", "B");
+CREATE UNIQUE INDEX "_ProfileToSkill_AB_unique" ON "_ProfileToSkill"("A", "B");
 
 -- CreateIndex
-CREATE INDEX "_CreatorToSkill_B_index" ON "_CreatorToSkill"("B");
+CREATE INDEX "_ProfileToSkill_B_index" ON "_ProfileToSkill"("B");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "_CreatorToJob_AB_unique" ON "_CreatorToJob"("A", "B");
+CREATE UNIQUE INDEX "_ProfileToWork_AB_unique" ON "_ProfileToWork"("A", "B");
 
 -- CreateIndex
-CREATE INDEX "_CreatorToJob_B_index" ON "_CreatorToJob"("B");
+CREATE INDEX "_ProfileToWork_B_index" ON "_ProfileToWork"("B");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "_SkillToUser_AB_unique" ON "_SkillToUser"("A", "B");
+CREATE UNIQUE INDEX "_ArtistToSkill_AB_unique" ON "_ArtistToSkill"("A", "B");
 
 -- CreateIndex
-CREATE INDEX "_SkillToUser_B_index" ON "_SkillToUser"("B");
+CREATE INDEX "_ArtistToSkill_B_index" ON "_ArtistToSkill"("B");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "_ArtistToJob_AB_unique" ON "_ArtistToJob"("A", "B");
+
+-- CreateIndex
+CREATE INDEX "_ArtistToJob_B_index" ON "_ArtistToJob"("B");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "_SkillToWork_AB_unique" ON "_SkillToWork"("A", "B");
+
+-- CreateIndex
+CREATE INDEX "_SkillToWork_B_index" ON "_SkillToWork"("B");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "_OrderToWork_AB_unique" ON "_OrderToWork"("A", "B");
@@ -361,52 +388,52 @@ CREATE UNIQUE INDEX "_OrderToWork_AB_unique" ON "_OrderToWork"("A", "B");
 CREATE INDEX "_OrderToWork_B_index" ON "_OrderToWork"("B");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "_NotificationToUser_AB_unique" ON "_NotificationToUser"("A", "B");
+CREATE UNIQUE INDEX "_NotificationToProfile_AB_unique" ON "_NotificationToProfile"("A", "B");
 
 -- CreateIndex
-CREATE INDEX "_NotificationToUser_B_index" ON "_NotificationToUser"("B");
+CREATE INDEX "_NotificationToProfile_B_index" ON "_NotificationToProfile"("B");
 
 -- AddForeignKey
-ALTER TABLE "Auth" ADD CONSTRAINT "Auth_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "User" ADD CONSTRAINT "User_profileId_fkey" FOREIGN KEY ("profileId") REFERENCES "Profile"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "AuthRecovery" ADD CONSTRAINT "AuthRecovery_authId_fkey" FOREIGN KEY ("authId") REFERENCES "Auth"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "AuthRecovery" ADD CONSTRAINT "AuthRecovery_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Session" ADD CONSTRAINT "Session_authId_fkey" FOREIGN KEY ("authId") REFERENCES "Auth"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "Session" ADD CONSTRAINT "Session_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Contact" ADD CONSTRAINT "Contact_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "Contact" ADD CONSTRAINT "Contact_ownerId_fkey" FOREIGN KEY ("ownerId") REFERENCES "Profile"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Creator" ADD CONSTRAINT "Creator_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "Artist" ADD CONSTRAINT "Artist_profileId_fkey" FOREIGN KEY ("profileId") REFERENCES "Profile"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Category" ADD CONSTRAINT "Category_p_categoryId_fkey" FOREIGN KEY ("p_categoryId") REFERENCES "Category"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Skill" ADD CONSTRAINT "Skill_categoryId_fkey" FOREIGN KEY ("categoryId") REFERENCES "Category"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "Skill" ADD CONSTRAINT "Skill_categoryId_fkey" FOREIGN KEY ("categoryId") REFERENCES "Category"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Work" ADD CONSTRAINT "Work_categoryId_fkey" FOREIGN KEY ("categoryId") REFERENCES "Category"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "Work" ADD CONSTRAINT "Work_categoryId_fkey" FOREIGN KEY ("categoryId") REFERENCES "Category"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Work" ADD CONSTRAINT "Work_creatorId_fkey" FOREIGN KEY ("creatorId") REFERENCES "Creator"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "Work" ADD CONSTRAINT "Work_artistId_fkey" FOREIGN KEY ("artistId") REFERENCES "Artist"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Work" ADD CONSTRAINT "Work_studioId_fkey" FOREIGN KEY ("studioId") REFERENCES "Studio"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Work" ADD CONSTRAINT "Work_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "Review" ADD CONSTRAINT "Review_userId_fkey" FOREIGN KEY ("userId") REFERENCES "Profile"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Review" ADD CONSTRAINT "Review_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "Review" ADD CONSTRAINT "Review_workId_fkey" FOREIGN KEY ("workId") REFERENCES "Work"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Review" ADD CONSTRAINT "Review_workId_fkey" FOREIGN KEY ("workId") REFERENCES "Work"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "Review" ADD CONSTRAINT "Review_parentId_fkey" FOREIGN KEY ("parentId") REFERENCES "Review"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Order" ADD CONSTRAINT "Order_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "Order" ADD CONSTRAINT "Order_userId_fkey" FOREIGN KEY ("userId") REFERENCES "Profile"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Favourite" ADD CONSTRAINT "Favourite_workId_fkey" FOREIGN KEY ("workId") REFERENCES "Work"("id") ON DELETE SET NULL ON UPDATE CASCADE;
@@ -415,19 +442,19 @@ ALTER TABLE "Favourite" ADD CONSTRAINT "Favourite_workId_fkey" FOREIGN KEY ("wor
 ALTER TABLE "Favourite" ADD CONSTRAINT "Favourite_postId_fkey" FOREIGN KEY ("postId") REFERENCES "Post"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Favourite" ADD CONSTRAINT "Favourite_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "Favourite" ADD CONSTRAINT "Favourite_userId_fkey" FOREIGN KEY ("userId") REFERENCES "Profile"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Favourite" ADD CONSTRAINT "Favourite_studioId_fkey" FOREIGN KEY ("studioId") REFERENCES "Studio"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Favourite" ADD CONSTRAINT "Favourite_creatorId_fkey" FOREIGN KEY ("creatorId") REFERENCES "Creator"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "Favourite" ADD CONSTRAINT "Favourite_artistId_fkey" FOREIGN KEY ("artistId") REFERENCES "Artist"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Reaction" ADD CONSTRAINT "Reaction_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "Reaction" ADD CONSTRAINT "Reaction_userId_fkey" FOREIGN KEY ("userId") REFERENCES "Profile"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Reaction" ADD CONSTRAINT "Reaction_creatorId_fkey" FOREIGN KEY ("creatorId") REFERENCES "Creator"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "Reaction" ADD CONSTRAINT "Reaction_artistId_fkey" FOREIGN KEY ("artistId") REFERENCES "Artist"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Reaction" ADD CONSTRAINT "Reaction_postId_fkey" FOREIGN KEY ("postId") REFERENCES "Post"("id") ON DELETE SET NULL ON UPDATE CASCADE;
@@ -442,52 +469,64 @@ ALTER TABLE "Reaction" ADD CONSTRAINT "Reaction_studioId_fkey" FOREIGN KEY ("stu
 ALTER TABLE "Reaction" ADD CONSTRAINT "Reaction_messageId_fkey" FOREIGN KEY ("messageId") REFERENCES "Message"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Studio" ADD CONSTRAINT "Studio_creatorId_fkey" FOREIGN KEY ("creatorId") REFERENCES "Creator"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "Studio" ADD CONSTRAINT "Studio_artistId_fkey" FOREIGN KEY ("artistId") REFERENCES "Artist"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Job" ADD CONSTRAINT "Job_categoryId_fkey" FOREIGN KEY ("categoryId") REFERENCES "Category"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "Job" ADD CONSTRAINT "Job_categoryId_fkey" FOREIGN KEY ("categoryId") REFERENCES "Category"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Job" ADD CONSTRAINT "Job_ownerId_fkey" FOREIGN KEY ("ownerId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "Job" ADD CONSTRAINT "Job_ownerId_fkey" FOREIGN KEY ("ownerId") REFERENCES "Profile"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Message" ADD CONSTRAINT "Message_toId_fkey" FOREIGN KEY ("toId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "Message" ADD CONSTRAINT "Message_toId_fkey" FOREIGN KEY ("toId") REFERENCES "Profile"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Message" ADD CONSTRAINT "Message_fromId_fkey" FOREIGN KEY ("fromId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "Message" ADD CONSTRAINT "Message_fromId_fkey" FOREIGN KEY ("fromId") REFERENCES "Profile"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Message" ADD CONSTRAINT "Message_p_messageId_fkey" FOREIGN KEY ("p_messageId") REFERENCES "Message"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Post" ADD CONSTRAINT "Post_authorId_fkey" FOREIGN KEY ("authorId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "Post" ADD CONSTRAINT "Post_authorId_fkey" FOREIGN KEY ("authorId") REFERENCES "Profile"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Comment" ADD CONSTRAINT "Comment_postId_fkey" FOREIGN KEY ("postId") REFERENCES "Post"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Comment" ADD CONSTRAINT "Comment_p_commentId_fkey" FOREIGN KEY ("p_commentId") REFERENCES "Comment"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "Comment" ADD CONSTRAINT "Comment_parentId_fkey" FOREIGN KEY ("parentId") REFERENCES "Comment"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Comment" ADD CONSTRAINT "Comment_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "Comment" ADD CONSTRAINT "Comment_userId_fkey" FOREIGN KEY ("userId") REFERENCES "Profile"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "_CreatorToSkill" ADD CONSTRAINT "_CreatorToSkill_A_fkey" FOREIGN KEY ("A") REFERENCES "Creator"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "_ProfileToSkill" ADD CONSTRAINT "_ProfileToSkill_A_fkey" FOREIGN KEY ("A") REFERENCES "Profile"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "_CreatorToSkill" ADD CONSTRAINT "_CreatorToSkill_B_fkey" FOREIGN KEY ("B") REFERENCES "Skill"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "_ProfileToSkill" ADD CONSTRAINT "_ProfileToSkill_B_fkey" FOREIGN KEY ("B") REFERENCES "Skill"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "_CreatorToJob" ADD CONSTRAINT "_CreatorToJob_A_fkey" FOREIGN KEY ("A") REFERENCES "Creator"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "_ProfileToWork" ADD CONSTRAINT "_ProfileToWork_A_fkey" FOREIGN KEY ("A") REFERENCES "Profile"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "_CreatorToJob" ADD CONSTRAINT "_CreatorToJob_B_fkey" FOREIGN KEY ("B") REFERENCES "Job"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "_ProfileToWork" ADD CONSTRAINT "_ProfileToWork_B_fkey" FOREIGN KEY ("B") REFERENCES "Work"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "_SkillToUser" ADD CONSTRAINT "_SkillToUser_A_fkey" FOREIGN KEY ("A") REFERENCES "Skill"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "_ArtistToSkill" ADD CONSTRAINT "_ArtistToSkill_A_fkey" FOREIGN KEY ("A") REFERENCES "Artist"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "_SkillToUser" ADD CONSTRAINT "_SkillToUser_B_fkey" FOREIGN KEY ("B") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "_ArtistToSkill" ADD CONSTRAINT "_ArtistToSkill_B_fkey" FOREIGN KEY ("B") REFERENCES "Skill"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "_ArtistToJob" ADD CONSTRAINT "_ArtistToJob_A_fkey" FOREIGN KEY ("A") REFERENCES "Artist"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "_ArtistToJob" ADD CONSTRAINT "_ArtistToJob_B_fkey" FOREIGN KEY ("B") REFERENCES "Job"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "_SkillToWork" ADD CONSTRAINT "_SkillToWork_A_fkey" FOREIGN KEY ("A") REFERENCES "Skill"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "_SkillToWork" ADD CONSTRAINT "_SkillToWork_B_fkey" FOREIGN KEY ("B") REFERENCES "Work"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "_OrderToWork" ADD CONSTRAINT "_OrderToWork_A_fkey" FOREIGN KEY ("A") REFERENCES "Order"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -496,7 +535,7 @@ ALTER TABLE "_OrderToWork" ADD CONSTRAINT "_OrderToWork_A_fkey" FOREIGN KEY ("A"
 ALTER TABLE "_OrderToWork" ADD CONSTRAINT "_OrderToWork_B_fkey" FOREIGN KEY ("B") REFERENCES "Work"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "_NotificationToUser" ADD CONSTRAINT "_NotificationToUser_A_fkey" FOREIGN KEY ("A") REFERENCES "Notification"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "_NotificationToProfile" ADD CONSTRAINT "_NotificationToProfile_A_fkey" FOREIGN KEY ("A") REFERENCES "Notification"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "_NotificationToUser" ADD CONSTRAINT "_NotificationToUser_B_fkey" FOREIGN KEY ("B") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "_NotificationToProfile" ADD CONSTRAINT "_NotificationToProfile_B_fkey" FOREIGN KEY ("B") REFERENCES "Profile"("id") ON DELETE CASCADE ON UPDATE CASCADE;

@@ -2,7 +2,6 @@ import { PrismaClient } from "@prisma/client";
 import { createVerifier } from "fast-jwt";
 import { FastifyReply, FastifyRequest, HookHandlerDoneFunction } from "fastify";
 import fp from "fastify-plugin";
-import { ROLE } from "../types";
 
 const prisma = new PrismaClient();
 const JWT_Verifier = createVerifier({ key: process.env.REFRESH_SECRET });
@@ -80,14 +79,14 @@ module.exports = fp(async function (fastify, opts) {
       // @ts-ignore
       const { user } = request.params;
       // @ts-ignore
-      const { userId, ownerId, creatorId, authorId } = request.body;
+      const { userId, ownerId, emailExists, authorId } = request.body;
 
       // @ts-ignore
       return request.user?.userId !== userId &&
         // @ts-ignore
         request.user?.userId !== ownerId &&
         // @ts-ignore
-        request.user?.userId !== creatorId &&
+        request.user?.userId !== emailExists &&
         // @ts-ignore
         request.user?.userId !== authorId &&
         // @ts-ignore
@@ -106,7 +105,7 @@ module.exports = fp(async function (fastify, opts) {
       done: HookHandlerDoneFunction
     ) => {
       // @ts-ignore
-      return request.user?.role !== ROLE.ARTIST
+      return request.user?.role !== "artists"
         ? reply.unauthorized("owner only; you are not authorised for this")
         : done;
     }
@@ -123,14 +122,14 @@ module.exports = fp(async function (fastify, opts) {
       // @ts-ignore
       const { user } = request.params;
       // @ts-ignore
-      const { userId, ownerId, creatorId, authorId } = request.body;
+      const { userId, ownerId, emailExists, authorId } = request.body;
 
       // @ts-ignore
       return request.user?.userId !== userId &&
         // @ts-ignore
         request.user?.userId !== ownerId &&
         // @ts-ignore
-        request.user?.userId !== creatorId &&
+        request.user?.userId !== emailExists &&
         // @ts-ignore
         request.user?.userId !== authorId &&
         // @ts-ignore
@@ -151,7 +150,7 @@ module.exports = fp(async function (fastify, opts) {
       done: HookHandlerDoneFunction
     ) => {
       // @ts-ignore
-      return request.user?.role !== ROLE.ADMIN
+      return request.user?.role !== "admin"
         ? reply.unauthorized("admin only")
         : done;
     }
