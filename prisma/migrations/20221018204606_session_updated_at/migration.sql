@@ -10,12 +10,17 @@ CREATE TYPE "CONTACT" AS ENUM ('default', 'residential', 'office');
 -- CreateEnum
 CREATE TYPE "SELLAS" AS ENUM ('bidding', 'best_offer', 'buy_now');
 
+-- CreateEnum
+CREATE TYPE "BIDDING" AS ENUM ('accepted', 'declined');
+
+-- CreateEnum
+CREATE TYPE "REACTION" AS ENUM ('like', 'dislike', 'love', 'emotional', 'happy', 'sad');
+
 -- CreateTable
 CREATE TABLE "User" (
     "id" UUID NOT NULL,
     "email" VARCHAR(200) NOT NULL,
     "password" VARCHAR(255) NOT NULL,
-    "profileId" UUID NOT NULL,
     "role" "ROLE" NOT NULL DEFAULT 'user',
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
@@ -36,9 +41,10 @@ CREATE TABLE "Session" (
     "id" UUID NOT NULL,
     "token" VARCHAR(500) NOT NULL,
     "authToken" VARCHAR(500),
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "userId" UUID NOT NULL,
     "expired" BOOLEAN NOT NULL DEFAULT false,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "Session_pkey" PRIMARY KEY ("id")
 );
@@ -53,6 +59,7 @@ CREATE TABLE "Profile" (
     "display_name" VARCHAR(200),
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
+    "userId" UUID NOT NULL,
 
     CONSTRAINT "Profile_pkey" PRIMARY KEY ("id")
 );
@@ -61,15 +68,15 @@ CREATE TABLE "Profile" (
 CREATE TABLE "Contact" (
     "id" UUID NOT NULL,
     "type" "CONTACT",
-    "phone" VARCHAR(15) NOT NULL,
+    "phone" VARCHAR(20) NOT NULL,
     "email" VARCHAR(500),
-    "address" TEXT NOT NULL,
-    "city" TEXT NOT NULL,
-    "state" TEXT NOT NULL,
-    "country" TEXT NOT NULL,
-    "zipcode" TEXT NOT NULL,
+    "address" VARCHAR(500) NOT NULL,
+    "city" VARCHAR(100) NOT NULL,
+    "state" VARCHAR(100) NOT NULL,
+    "country" VARCHAR(100) NOT NULL,
+    "zipcode" VARCHAR(10) NOT NULL,
     "position" VARCHAR(100),
-    "ownerId" UUID,
+    "ownerId" UUID NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -79,10 +86,9 @@ CREATE TABLE "Contact" (
 -- CreateTable
 CREATE TABLE "Artist" (
     "id" UUID NOT NULL,
-    "profileId" UUID,
+    "profileId" UUID NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
-    "deletedAt" TIMESTAMP(3),
 
     CONSTRAINT "Artist_pkey" PRIMARY KEY ("id")
 );
@@ -92,7 +98,7 @@ CREATE TABLE "Category" (
     "id" UUID NOT NULL,
     "name" VARCHAR(100) NOT NULL,
     "description" TEXT,
-    "p_categoryId" UUID,
+    "p_categoryId" UUID NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -103,7 +109,7 @@ CREATE TABLE "Category" (
 CREATE TABLE "Skill" (
     "id" UUID NOT NULL,
     "name" VARCHAR(100) NOT NULL,
-    "categoryId" UUID,
+    "categoryId" UUID NOT NULL,
     "description" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
@@ -118,7 +124,7 @@ CREATE TABLE "Work" (
     "categoryId" UUID NOT NULL,
     "description" TEXT,
     "artistId" UUID NOT NULL,
-    "studioId" UUID,
+    "studioId" UUID NOT NULL,
     "price" MONEY,
     "currency" VARCHAR(3) DEFAULT 'NGN',
     "sellAs" "SELLAS"[] DEFAULT ARRAY['buy_now']::"SELLAS"[],
@@ -133,15 +139,27 @@ CREATE TABLE "Work" (
 CREATE TABLE "Review" (
     "id" UUID NOT NULL,
     "userId" UUID NOT NULL,
-    "comment" TEXT,
+    "comment" VARCHAR(100),
     "rating" DECIMAL(65,30) NOT NULL,
     "workId" UUID NOT NULL,
-    "parentId" UUID,
+    "p_reviewId" UUID,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
-    "reviewId" UUID,
 
     CONSTRAINT "Review_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "Bidding" (
+    "id" UUID NOT NULL,
+    "workId" UUID NOT NULL,
+    "userId" UUID NOT NULL,
+    "offer" MONEY NOT NULL,
+    "status" "BIDDING" NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "Bidding_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -149,7 +167,8 @@ CREATE TABLE "Order" (
     "id" UUID NOT NULL,
     "description" TEXT,
     "status" TEXT NOT NULL DEFAULT 'pending',
-    "price" DECIMAL(65,30),
+    "workId" UUID NOT NULL,
+    "price" MONEY,
     "currency" VARCHAR(3),
     "userId" UUID NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -175,7 +194,7 @@ CREATE TABLE "Favourite" (
 -- CreateTable
 CREATE TABLE "Reaction" (
     "id" UUID NOT NULL,
-    "type" VARCHAR(15) NOT NULL,
+    "type" "REACTION" NOT NULL,
     "userId" UUID NOT NULL,
     "artistId" UUID,
     "postId" UUID,
@@ -249,7 +268,6 @@ CREATE TABLE "Post" (
     "authorId" UUID NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
-    "deletedAt" TIMESTAMP(3),
 
     CONSTRAINT "Post_pkey" PRIMARY KEY ("id")
 );
@@ -298,12 +316,6 @@ CREATE TABLE "_SkillToWork" (
 );
 
 -- CreateTable
-CREATE TABLE "_OrderToWork" (
-    "A" UUID NOT NULL,
-    "B" UUID NOT NULL
-);
-
--- CreateTable
 CREATE TABLE "_NotificationToProfile" (
     "A" UUID NOT NULL,
     "B" UUID NOT NULL
@@ -311,9 +323,6 @@ CREATE TABLE "_NotificationToProfile" (
 
 -- CreateIndex
 CREATE UNIQUE INDEX "User_email_key" ON "User"("email");
-
--- CreateIndex
-CREATE UNIQUE INDEX "User_profileId_key" ON "User"("profileId");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "AuthRecovery_token_key" ON "AuthRecovery"("token");
@@ -328,6 +337,9 @@ CREATE UNIQUE INDEX "Session_authToken_key" ON "Session"("authToken");
 CREATE UNIQUE INDEX "Profile_display_name_key" ON "Profile"("display_name");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "Profile_userId_key" ON "Profile"("userId");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "Contact_phone_key" ON "Contact"("phone");
 
 -- CreateIndex
@@ -340,7 +352,10 @@ CREATE UNIQUE INDEX "Category_name_key" ON "Category"("name");
 CREATE UNIQUE INDEX "Skill_name_key" ON "Skill"("name");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "Reaction_type_key" ON "Reaction"("type");
+CREATE UNIQUE INDEX "Bidding_workId_key" ON "Bidding"("workId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Order_workId_key" ON "Order"("workId");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "Studio_name_key" ON "Studio"("name");
@@ -382,25 +397,19 @@ CREATE UNIQUE INDEX "_SkillToWork_AB_unique" ON "_SkillToWork"("A", "B");
 CREATE INDEX "_SkillToWork_B_index" ON "_SkillToWork"("B");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "_OrderToWork_AB_unique" ON "_OrderToWork"("A", "B");
-
--- CreateIndex
-CREATE INDEX "_OrderToWork_B_index" ON "_OrderToWork"("B");
-
--- CreateIndex
 CREATE UNIQUE INDEX "_NotificationToProfile_AB_unique" ON "_NotificationToProfile"("A", "B");
 
 -- CreateIndex
 CREATE INDEX "_NotificationToProfile_B_index" ON "_NotificationToProfile"("B");
 
 -- AddForeignKey
-ALTER TABLE "User" ADD CONSTRAINT "User_profileId_fkey" FOREIGN KEY ("profileId") REFERENCES "Profile"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
 ALTER TABLE "AuthRecovery" ADD CONSTRAINT "AuthRecovery_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Session" ADD CONSTRAINT "Session_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Profile" ADD CONSTRAINT "Profile_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Contact" ADD CONSTRAINT "Contact_ownerId_fkey" FOREIGN KEY ("ownerId") REFERENCES "Profile"("id") ON DELETE SET NULL ON UPDATE CASCADE;
@@ -430,10 +439,19 @@ ALTER TABLE "Review" ADD CONSTRAINT "Review_userId_fkey" FOREIGN KEY ("userId") 
 ALTER TABLE "Review" ADD CONSTRAINT "Review_workId_fkey" FOREIGN KEY ("workId") REFERENCES "Work"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Review" ADD CONSTRAINT "Review_parentId_fkey" FOREIGN KEY ("parentId") REFERENCES "Review"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "Review" ADD CONSTRAINT "Review_p_reviewId_fkey" FOREIGN KEY ("p_reviewId") REFERENCES "Review"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Bidding" ADD CONSTRAINT "Bidding_workId_fkey" FOREIGN KEY ("workId") REFERENCES "Work"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Bidding" ADD CONSTRAINT "Bidding_userId_fkey" FOREIGN KEY ("userId") REFERENCES "Profile"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Order" ADD CONSTRAINT "Order_userId_fkey" FOREIGN KEY ("userId") REFERENCES "Profile"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Order" ADD CONSTRAINT "Order_workId_fkey" FOREIGN KEY ("workId") REFERENCES "Work"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Favourite" ADD CONSTRAINT "Favourite_workId_fkey" FOREIGN KEY ("workId") REFERENCES "Work"("id") ON DELETE SET NULL ON UPDATE CASCADE;
@@ -527,12 +545,6 @@ ALTER TABLE "_SkillToWork" ADD CONSTRAINT "_SkillToWork_A_fkey" FOREIGN KEY ("A"
 
 -- AddForeignKey
 ALTER TABLE "_SkillToWork" ADD CONSTRAINT "_SkillToWork_B_fkey" FOREIGN KEY ("B") REFERENCES "Work"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "_OrderToWork" ADD CONSTRAINT "_OrderToWork_A_fkey" FOREIGN KEY ("A") REFERENCES "Order"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "_OrderToWork" ADD CONSTRAINT "_OrderToWork_B_fkey" FOREIGN KEY ("B") REFERENCES "Work"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "_NotificationToProfile" ADD CONSTRAINT "_NotificationToProfile_A_fkey" FOREIGN KEY ("A") REFERENCES "Notification"("id") ON DELETE CASCADE ON UPDATE CASCADE;

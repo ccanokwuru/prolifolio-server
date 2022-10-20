@@ -1,0 +1,126 @@
+routes
+    auth
+        register *
+        login *
+        logout *
+        password *
+            forgotten
+            reset
+            update
+    user
+        update-profile *
+        contacts *
+            all *
+            add *
+            edit *
+            delete *
+        interests *
+            all *
+            link/add *
+            remove *
+        delete *
+        all *
+        single *
+        become-artist *
+        order  
+            all
+
+    work
+        create * 
+        update *
+        delete *
+        all *
+        single *
+        favourite 
+        review
+            comment
+        make-wish
+        order
+            create
+        bid
+        react 
+
+    order
+        update
+        delete
+        single
+
+    post
+        create
+        update
+        comment
+            react
+            comment
+        react
+        delete
+        all
+        single
+        favourite
+
+    job
+        create
+        update
+        delete
+        all
+        single
+
+    message *
+        send *
+        reply *
+        forward *
+        all *
+        single *
+        start *
+
+    skill
+        all
+        single
+
+    artist
+        create*
+        update*
+        delete*
+        all*
+        single*
+        skills *
+            all *
+            create *
+            link *
+            remove *
+        works *
+            all *
+        favourite
+            all
+            make *
+            remove *
+        rate *
+        order
+            all
+            update
+
+    admin
+        create
+        update
+        delete
+        all
+        single
+        skills 
+            all 
+            create
+            link 
+            remove 
+            edit
+        
+    studio
+        create
+        update
+        react
+        delete
+        all
+        single
+        mark-favourite
+        react
+
+    payment
+        withcard
+        bank

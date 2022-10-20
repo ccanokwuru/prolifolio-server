@@ -1,93 +1,75 @@
-import { Contact, PrismaClient, User } from "@prisma/client";
+import { Type } from "@sinclair/typebox";
+import { Contact, PrismaClient, Profile } from "@prisma/client";
 import { FastifyPluginAsync } from "fastify";
 const prisma = new PrismaClient();
 
-interface UserData extends User {
+interface UserData extends Profile {
   email: string;
 }
 
 const userRoute: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
-  // get user
-  fastify.get<{ Params: { user: string } }>(
-    "/u/:user",
-    async function (request, reply) {
-      const { user } = request.params;
-
-      try {
-        const userData = await prisma.user.findUnique({
-          where: { id: user },
-          select: {
-            first_name: true,
-            last_name: true,
-            other_name: true,
-            createdAt: true,
-            updatedAt: true,
-            avatar: true,
-            id: true,
-            auth: {
-              select: {
-                email: true,
-                role: true,
-              },
-            },
-          },
-        });
-        return {
-          user: {
-            ...userData,
-            auth: undefined,
-            email: userData?.auth?.email,
-            role: userData?.auth?.role,
-          },
-        };
-      } catch (error) {
-        console.log(error);
-        return reply.internalServerError();
-      }
-    }
-  );
-
   // update user
-  fastify.post<{ Params: { user: string }; Body: UserData }>(
-    "/u/:user/update",
+  fastify.put<{ Params: { user: string }; Body: UserData }>(
+    "/:user/update",
     {
+      schema: {
+        params: Type.Object({
+          user: Type.String({ format: "uuid" }),
+        }),
+        body: Type.Object({
+          email: Type.String({ format: "email", maxLength: 500 }),
+          first_name: Type.String({ minLength: 2, maxLength: 200 }),
+          last_name: Type.String({ minLength: 2, maxLength: 200 }),
+          avatar: Type.Optional(Type.String({ minLength: 5, maxLength: 500 })),
+          display_name: Type.Optional(
+            Type.String({ minLength: 2, maxLength: 200 })
+          ),
+        }),
+      },
       preHandler: fastify.auth(
         [
           // @ts-ignore
           fastify.authenticate,
-          // @ts-ignore
-          fastify.is_owner,
         ],
         { run: "all" }
       ),
     },
     async function (request, reply) {
       const { user } = request.params;
-      const { email, first_name, last_name, other_name, avatar } = request.body;
+      const { email, first_name, last_name, other_name, avatar, display_name } =
+        request.body;
 
       try {
-        const userData = await prisma.user.update({
+        const profileExist = await prisma.profile.findFirst({
+          where: {
+            id: user,
+            user: {
+              profile: {
+                // @ts-ignore
+                id: request.user.userId,
+              },
+            },
+          },
+        });
+
+        if (!profileExist) return reply.unauthorized();
+
+        const profile = await prisma.profile.update({
           where: { id: user },
           data: {
             first_name,
             last_name,
             other_name,
             avatar,
-            auth: {
+            display_name,
+            user: {
               update: {
                 email,
               },
             },
           },
-          select: {
-            first_name: true,
-            last_name: true,
-            other_name: true,
-            createdAt: true,
-            updatedAt: true,
-            avatar: true,
-            id: true,
-            auth: {
+          include: {
+            user: {
               select: {
                 email: true,
                 role: true,
@@ -98,12 +80,7 @@ const userRoute: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
 
         return {
           message: "successful",
-          user: {
-            ...userData,
-            auth: undefined,
-            email: userData?.auth?.email,
-            role: userData?.auth?.role,
-          },
+          profile,
         };
       } catch (error) {
         console.log(error);
@@ -113,25 +90,24 @@ const userRoute: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
   );
 
   // delete user
-  fastify.delete<{ Body: { userId: string } }>(
+  fastify.delete(
     "/delete",
     {
       preHandler: fastify.auth(
         [
           // @ts-ignore
           fastify.authenticate,
-          // @ts-ignore
-          fastify.is_owner,
         ],
         { run: "all" }
       ),
     },
     async function (request, reply) {
-      const { userId } = request.body;
-
       try {
-        await prisma.auth.delete({
-          where: { userId },
+        await prisma.profile.delete({
+          where: {
+            // @ts-ignore
+            id: request.user.userId,
+          },
         });
         return {
           message: "successful",
@@ -157,21 +133,27 @@ const userRoute: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
     },
     async function (request, reply) {
       try {
-        const artist = await prisma.user.update({
+        const isAreadyArtist = await prisma.artist.findFirst({
           where: {
             // @ts-ignore
-            id: request.user.userId,
+            profileId: request.user.userId,
           },
+          include: {
+            profile: true,
+          },
+        });
+        if (isAreadyArtist)
+          return reply.send({
+            message: "your are an existing artist on this platform",
+            artist: isAreadyArtist,
+          });
+        const artist = await prisma.artist.create({
           data: {
-            artist: {
-              connectOrCreate: {
-                where: {
-                  // @ts-ignore
-                  userId: request.userId,
-                },
-                create: {},
-              },
-            },
+            // @ts-ignore
+            profileId: request.user.userId,
+          },
+          include: {
+            profile: true,
           },
         });
 
@@ -187,11 +169,25 @@ const userRoute: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
   );
 
   // add user contact
-  fastify.post<{
-    Body: Contact;
-  }>(
+  fastify.post<{ Body: Contact }>(
     "/add-contact",
     {
+      schema: {
+        body: Type.Object({
+          phone: Type.String({ minLength: 5, maxLength: 20 }),
+          email: Type.Optional(
+            Type.String({ format: "email", maxLength: 500 })
+          ),
+          address: Type.String({ minLength: 5, maxLength: 500 }),
+          city: Type.String({ minLength: 5, maxLength: 100 }),
+          state: Type.String({ minLength: 5, maxLength: 100 }),
+          country: Type.String({ minLength: 5, maxLength: 100 }),
+          zipcode: Type.String({ minLength: 5, maxLength: 10 }),
+          position: Type.Optional(
+            Type.String({ minLength: 2, maxLength: 100 })
+          ),
+        }),
+      },
       preHandler: fastify.auth(
         [
           // @ts-ignore
@@ -232,7 +228,7 @@ const userRoute: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
             state,
             country,
             // @ts-ignore
-            userId: request.user?.userId,
+            ownerId: request.user?.userId,
           },
         });
         return {
@@ -247,14 +243,25 @@ const userRoute: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
   );
 
   // edit user contact
-  fastify.post<{
-    Body: Contact;
-    Params: {
-      contact: string;
-    };
-  }>(
+  fastify.put<{ Body: Contact; Params: { contact: string } }>(
     "/edit-contact/:contact",
     {
+      schema: {
+        body: Type.Object({
+          phone: Type.String({ minLength: 5, maxLength: 20 }),
+          email: Type.Optional(
+            Type.String({ format: "email", maxLength: 500 })
+          ),
+          address: Type.String({ minLength: 5, maxLength: 500 }),
+          city: Type.String({ minLength: 5, maxLength: 100 }),
+          state: Type.String({ minLength: 5, maxLength: 100 }),
+          country: Type.String({ minLength: 5, maxLength: 100 }),
+          zipcode: Type.String({ minLength: 5, maxLength: 10 }),
+          position: Type.Optional(
+            Type.String({ minLength: 2, maxLength: 100 })
+          ),
+        }),
+      },
       preHandler: fastify.auth(
         [
           // @ts-ignore
@@ -283,28 +290,17 @@ const userRoute: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
         });
 
       try {
-        const contact = await prisma.contact.findFirst({
+        const contactExits = await prisma.contact.findFirst({
           where: {
             id: request.body.id,
-            user: {
-              // @ts-ignore
-              id: request.user.userId,
-            },
+            // @ts-ignore
+            ownerId: request.user.userId,
           },
         });
 
         // @ts-ignore
-        if (!contact)
-          return reply.code(404).send({
-            message: "Failed",
-            errors: [`not found or owner only`],
-          });
-      } catch (error) {
-        console.log(error);
-        return reply.internalServerError();
-      }
+        if (!contactExits) return reply.unauthorized();
 
-      try {
         const contact = await prisma.contact.update({
           where: {
             id: request.params.contact,
@@ -333,11 +329,14 @@ const userRoute: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
   );
 
   // delete user contact
-  fastify.delete<{
-    Body: { id: string };
-  }>(
+  fastify.delete<{ Body: { id: string } }>(
     "/delete-contact",
     {
+      schema: {
+        body: Type.Object({
+          id: Type.String({ format: "uuid" }),
+        }),
+      },
       preHandler: fastify.auth(
         [
           // @ts-ignore
@@ -360,28 +359,17 @@ const userRoute: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
         });
 
       try {
-        const contact = await prisma.contact.findFirst({
+        const contactExits = await prisma.contact.findFirst({
           where: {
             id: request.body.id,
-            user: {
-              // @ts-ignore
-              id: request.user.userId,
-            },
+            // @ts-ignore
+            ownerId: request.user.userId,
           },
         });
 
         // @ts-ignore
-        if (!contact)
-          return reply.code(404).send({
-            message: "Failed",
-            errors: [`not found or owner only`],
-          });
-      } catch (error) {
-        console.log(error);
-        return reply.internalServerError();
-      }
+        if (!contactExits) return reply.unauthorized();
 
-      try {
         const contact = await prisma.contact.delete({
           where: {
             id: request.body.id,
@@ -399,13 +387,14 @@ const userRoute: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
   );
 
   // get one user contact
-  fastify.get<{
-    Params: {
-      contact: string;
-    };
-  }>(
+  fastify.get<{ Params: { contact: string } }>(
     "/get-contact/:contact",
     {
+      schema: {
+        params: Type.Object({
+          contact: Type.String({ format: "uuid" }),
+        }),
+      },
       preHandler: fastify.auth(
         [
           // @ts-ignore
@@ -419,10 +408,8 @@ const userRoute: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
         const contact = await prisma.contact.findFirst({
           where: {
             id: request.params.contact,
-            user: {
-              // @ts-ignore
-              id: request.user?.userId,
-            },
+            // @ts-ignore
+            ownerId: request.user?.userId,
           },
         });
 
@@ -454,10 +441,8 @@ const userRoute: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
       try {
         const contacts = await prisma.contact.findMany({
           where: {
-            user: {
-              // @ts-ignore
-              id: request.user?.userId,
-            },
+            // @ts-ignore
+            ownerId: request.user?.userId,
           },
         });
 
@@ -514,6 +499,11 @@ const userRoute: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
   fastify.get<{ Params: { interest: string } }>(
     "/get-interest/:interest",
     {
+      schema: {
+        params: Type.Object({
+          interest: Type.String({ format: "uuid" }),
+        }),
+      },
       preHandler: fastify.auth(
         [
           // @ts-ignore
@@ -534,6 +524,11 @@ const userRoute: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
               },
             },
           },
+          include: {
+            category: {
+              include: { works: true },
+            },
+          },
         });
 
         // @ts-ignore
@@ -549,9 +544,14 @@ const userRoute: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
   );
 
   // add user interest
-  fastify.post<{ Body: { id?: string } }>(
+  fastify.post<{ Body: { id: string } }>(
     "/add-interest",
     {
+      schema: {
+        body: Type.Object({
+          intererst: Type.String({ format: "uuid" }),
+        }),
+      },
       preHandler: fastify.auth(
         [
           // @ts-ignore
@@ -563,20 +563,15 @@ const userRoute: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
     async function (request, reply) {
       const { id } = request.body;
 
-      if (!id)
-        return reply.code(406).send({
-          message: "missing fields",
-          errors: [`provide "id" of your interest`],
-        });
       try {
-        const interest = await prisma.user.update({
+        const interest = await prisma.profile.update({
           where: {
             // @ts-ignore
             id: request.user.userId,
           },
           data: {
             interests: {
-              connect: [{ id }],
+              connect: { id },
             },
           },
         });
@@ -608,18 +603,13 @@ const userRoute: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
     async function (request, reply) {
       const { ids } = request.body;
 
-      if (!ids?.length)
-        return reply.code(406).send({
-          message: "missing fields",
-          errors: [`provide "ids" of your interest`],
-        });
       try {
         const allIds: object[] = [];
 
         ids.forEach((id) => {
           allIds.push({ id });
         });
-        const interest = await prisma.user.update({
+        const interest = await prisma.profile.update({
           where: {
             // @ts-ignore
             id: request.user?.userId,
@@ -644,9 +634,14 @@ const userRoute: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
   );
 
   // remove user interest
-  fastify.delete<{ Body: { id?: string } }>(
+  fastify.delete<{ Body: { id: string } }>(
     "/remove-interest",
     {
+      schema: {
+        body: Type.Object({
+          id: Type.String({ format: "uuid" }),
+        }),
+      },
       preHandler: fastify.auth(
         [
           // @ts-ignore
@@ -658,13 +653,8 @@ const userRoute: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
     async function (request, reply) {
       const { id } = request.body;
 
-      if (!id)
-        return reply.code(406).send({
-          message: "missing fields",
-          errors: [`provide "id" of your interest`],
-        });
       try {
-        const interest = await prisma.user.update({
+        const interest = await prisma.profile.update({
           where: {
             // @ts-ignore
             id: request.user.userId,
@@ -683,6 +673,41 @@ const userRoute: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
           message: interest ? "successful" : "not found",
           interest,
         });
+      } catch (error) {
+        console.log(error);
+        return reply.internalServerError();
+      }
+    }
+  );
+
+  // get user
+  fastify.get<{ Params: { user: string } }>(
+    "/:user",
+    {
+      schema: {
+        params: Type.Object({
+          user: Type.String({ format: "uuid" }),
+        }),
+      },
+    },
+    async function (request, reply) {
+      const { user } = request.params;
+
+      try {
+        const profile = await prisma.profile.findUnique({
+          where: { id: user },
+          include: {
+            user: {
+              select: {
+                email: true,
+                role: true,
+              },
+            },
+          },
+        });
+        return {
+          profile,
+        };
       } catch (error) {
         console.log(error);
         return reply.internalServerError();

@@ -33,7 +33,17 @@ module.exports = fp(async function (fastify, opts) {
         where: {
           authToken,
         },
-        include: { auth: true },
+        include: {
+          user: {
+            include: {
+              profile: {
+                select: {
+                  id: true,
+                },
+              },
+            },
+          },
+        },
       });
 
       if (!session || session.expired)
@@ -56,43 +66,15 @@ module.exports = fp(async function (fastify, opts) {
         }
       }
       const user = {
-        ...session.auth,
-        password: undefined,
+        ...session.user,
+        profile: undefined,
+        userId: session?.user?.profile?.id,
         token: authToken,
-        deletedAt: undefined,
       };
 
       request.user = user;
 
       return done;
-    }
-  );
-
-  // authorise owners only
-  fastify.decorate(
-    "is_owner",
-    async (
-      request: FastifyRequest,
-      reply: FastifyReply,
-      done: HookHandlerDoneFunction
-    ) => {
-      // @ts-ignore
-      const { user } = request.params;
-      // @ts-ignore
-      const { userId, ownerId, emailExists, authorId } = request.body;
-
-      // @ts-ignore
-      return request.user?.userId !== userId &&
-        // @ts-ignore
-        request.user?.userId !== ownerId &&
-        // @ts-ignore
-        request.user?.userId !== emailExists &&
-        // @ts-ignore
-        request.user?.userId !== authorId &&
-        // @ts-ignore
-        request.user?.userId !== user
-        ? reply.unauthorized("owner only; you are not authorised for this")
-        : done;
     }
   );
 
@@ -111,32 +93,19 @@ module.exports = fp(async function (fastify, opts) {
     }
   );
 
-  // authorise owners & admins only
+  // authorise artists or admin only
   fastify.decorate(
-    "is_owner_admin",
+    "is_artist_admin",
     async (
       request: FastifyRequest,
       reply: FastifyReply,
       done: HookHandlerDoneFunction
     ) => {
       // @ts-ignore
-      const { user } = request.params;
-      // @ts-ignore
-      const { userId, ownerId, emailExists, authorId } = request.body;
-
-      // @ts-ignore
-      return request.user?.userId !== userId &&
-        // @ts-ignore
-        request.user?.userId !== ownerId &&
-        // @ts-ignore
-        request.user?.userId !== emailExists &&
-        // @ts-ignore
-        request.user?.userId !== authorId &&
-        // @ts-ignore
-        request.user?.userId !== user &&
+      return request.user?.role !== "artists" ||
         // @ts-ignore
         request.user?.role !== "admin"
-        ? reply.unauthorized("specific roles; you are not authorised for this")
+        ? reply.unauthorized("owner only; you are not authorised for this")
         : done;
     }
   );

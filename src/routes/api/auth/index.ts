@@ -1,4 +1,5 @@
 import { PrismaClient, Profile } from "@prisma/client";
+import { Type } from "@sinclair/typebox";
 import { FastifyPluginAsync } from "fastify";
 import {
   checkEmail,
@@ -12,6 +13,12 @@ const prisma = new PrismaClient();
 interface LoginI {
   email: string;
   password: string;
+}
+
+interface ChangeI {
+  old_password: string;
+  new_password: string;
+  confirm_password: string;
 }
 
 interface RegisterI extends Profile {
@@ -30,6 +37,21 @@ const auth: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
   // user registration
   fastify.post<{ Body: RegisterI }>(
     "/register",
+    {
+      schema: {
+        body: Type.Object({
+          email: Type.String({ format: "email", maxLength: 500 }),
+          password: Type.String({ minLength: 6 }),
+          confirm_password: Type.String({ minLength: 6 }),
+          first_name: Type.String({ minLength: 2, maxLength: 200 }),
+          last_name: Type.String({ minLength: 2, maxLength: 200 }),
+          display_name: Type.Optional(
+            Type.String({ minLength: 2, maxLength: 200 })
+          ),
+          is_artist: Type.Optional(Type.Boolean()),
+        }),
+      },
+    },
     async function (request, reply) {
       const errors: string[] = [];
       const {
@@ -41,23 +63,6 @@ const auth: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
         first_name,
         last_name,
       } = request.body;
-
-      // check for all required fields
-      if (!email || !email.length) errors.push("email is required");
-      if (!password || !password.length) errors.push("password is required");
-      if (!confirm_password || !confirm_password.length)
-        errors.push("confirm_password is required");
-      if (is_artist && (!display_name || !display_name.length))
-        errors.push("display_name is required");
-      if (!first_name || !first_name.length)
-        errors.push("first_name is required");
-      if (!last_name || !last_name.length) errors.push("last_name is required");
-
-      if (errors.length)
-        return reply.code(400).send({
-          message: "Registration failed",
-          errors,
-        });
 
       // verify email & password format
       const emailCheck = checkEmail(email);
@@ -73,7 +78,7 @@ const auth: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
         errors.push(`passwords do not match`);
 
       if (errors.length)
-        return reply.code(406).send({
+        return reply.code(400).send({
           message: "Registration failed",
           errors,
         });
@@ -160,118 +165,124 @@ const auth: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
   );
 
   // user login
-  fastify.post<{ Body: LoginI }>("/login", async function (request, reply) {
-    const errors: string[] = [];
-    const { email, password } = request.body;
+  fastify.post<{ Body: LoginI }>(
+    "/login",
+    {
+      schema: {
+        body: Type.Object({
+          email: Type.String({ format: "email", maxLength: 500 }),
+          password: Type.String({ minLength: 6, maxLength: 40 }),
+        }),
+      },
+    },
+    async function (request, reply) {
+      const errors: string[] = [];
+      const { email, password } = request.body;
 
-    // check for all required fields
-    if (!email || !email.length) errors.push("email is required");
-    if (!password || !password.length) errors.push("password is required");
+      // verify email & password format
+      const emailCheck = checkEmail(email);
+      const passwordCheck = checkPassword(password);
 
-    if (errors.length)
-      return reply.code(400).send({
-        message: "Login failed",
-        errors,
-      });
+      if (!emailCheck) errors.push("invalid email format");
 
-    // verify email & password format
-    const emailCheck = checkEmail(email);
-    const passwordCheck = checkPassword(password);
-    if (!emailCheck) errors.push("invalid email format");
+      if (!passwordCheck)
+        errors.push(
+          "invalid password format 6+ characters, 1+ uppercase, 1+ symbols or number "
+        );
 
-    if (!passwordCheck)
-      errors.push(
-        "invalid password format 6+ characters, 1+ uppercase, 1+ symbols or number "
-      );
+      if (errors.length)
+        return reply.code(400).send({
+          message: "Login failed",
+          errors,
+        });
 
-    if (errors.length)
-      return reply.code(406).send({
-        message: "Login failed",
-        errors,
-      });
-
-    // check if user exists and verify password
-    const user = emailCheck
-      ? await prisma.user.findFirst({
-          where: {
-            email: {
-              equals: email,
-              mode: "insensitive",
+      // check if user exists and verify password
+      const user = emailCheck
+        ? await prisma.user.findFirst({
+            where: {
+              email: {
+                equals: email,
+                mode: "insensitive",
+              },
             },
-          },
-        })
-      : undefined;
+          })
+        : undefined;
 
-    const verifyPassword = user
-      ? await fastify.bcrypt.compare(password, user.password)
-      : false;
+      const verifyPassword = user
+        ? await fastify.bcrypt.compare(password, user.password)
+        : false;
 
-    !user
-      ? errors.push("user does not exist")
-      : !verifyPassword
-      ? errors.push("invalid user credentials")
-      : null;
+      !user
+        ? errors.push("user does not exist")
+        : !verifyPassword
+        ? errors.push("invalid user credentials")
+        : null;
 
-    if (errors.length)
-      return reply.code(user && !verifyPassword ? 409 : 403).send({
-        message: "Login failed",
-        errors,
-      });
+      if (errors.length)
+        return reply.code(user && !verifyPassword ? 409 : 403).send({
+          message: "Login failed",
+          errors,
+        });
 
-    // create refresh token & user session to login
-    const refreshToken = JWT_Signer({
-      email: email,
-      client: request.headers["user-agent"],
-      role: user?.role,
-    });
-
-    try {
-      const session = await prisma.session.create({
-        data: {
-          token: refreshToken,
-          user: {
-            connect: {
-              email: email,
-            },
-          },
-        },
-      });
-
-      const authToken = fastify.jwt.sign({
-        session: session.id,
+      // create refresh token & user session to login
+      const refreshToken = JWT_Signer({
+        email: email,
+        client: request.headers["user-agent"],
         role: user?.role,
       });
 
-      const sessionUpdate = await prisma.session.update({
-        where: {
-          id: session.id,
-        },
-        data: {
-          authToken,
-        },
-        include: {
-          user: {
-            select: {
-              email: true,
-              id: true,
-              role: true,
-              createdAt: true,
-              updatedAt: true,
+      try {
+        const session = await prisma.session.create({
+          data: {
+            token: refreshToken,
+            user: {
+              connect: {
+                email: email,
+              },
             },
           },
-        },
-      });
+        });
 
-      return reply.code(200).send({
-        authToken,
-        refreshToken,
-        user: sessionUpdate.user,
-      });
-    } catch (error) {
-      console.log(error);
-      return reply.internalServerError();
+        const authToken = fastify.jwt.sign({
+          session: session.id,
+          role: user?.role,
+        });
+
+        const sessionUpdate = await prisma.session.update({
+          where: {
+            id: session.id,
+          },
+          data: {
+            authToken,
+          },
+          include: {
+            user: {
+              select: {
+                email: true,
+                id: true,
+                role: true,
+                createdAt: true,
+                updatedAt: true,
+              },
+            },
+          },
+        });
+
+        return reply
+          .code(200)
+          .setCookie("refreshToken", refreshToken, {
+            httpOnly: true,
+          })
+          .send({
+            authToken,
+            user: sessionUpdate.user,
+          });
+      } catch (error) {
+        console.log(error);
+        return reply.internalServerError();
+      }
     }
-  });
+  );
 
   // user logout
   fastify.get(
@@ -310,34 +321,29 @@ const auth: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
   // user forgot password request for token
   fastify.post<{ Body: { email: string } }>(
     "/forgotten-password",
+    {
+      schema: {
+        body: Type.Object({
+          email: Type.String({ format: "email", maxLength: 500 }),
+        }),
+      },
+    },
     async function (request, reply) {
-      const errors: string[] = [];
       const { email } = request.body;
 
-      if (!email) return reply.badRequest("email is required");
-
-      // verify email & password format
-      const emailCheck = checkEmail(email);
-      if (!emailCheck) errors.push("invalid email format");
-
       // check email on db
-      const emailExists = emailCheck
-        ? await prisma.user.findUnique({
-            where: {
-              email,
-            },
-          })
-        : undefined;
+      const emailExists = await prisma.user.findUnique({
+        where: {
+          email,
+        },
+      });
 
       if (!emailExists) {
-        errors.push(`user with email "${email}" doesn't exists`);
-      }
-
-      if (errors.length)
-        return reply.code(!emailCheck ? 406 : 403).send({
+        return reply.code(404).send({
           message: "Failed",
-          errors,
+          errors: ["email not found"],
         });
+      }
 
       try {
         const recovery = await prisma.authRecovery.create({
@@ -365,9 +371,20 @@ const auth: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
   // user reset password request
   fastify.post<{ Body: ResetPasswordI }>(
     "/reset-password",
+    {
+      schema: {
+        body: Type.Object({
+          email: Type.String({ format: "email", maxLength: 500 }),
+          password: Type.String({ minLength: 6 }),
+          confirm_password: Type.String({ minLength: 6 }),
+          token: Type.String({ minLength: 64 }),
+        }),
+      },
+    },
     async function (request, reply) {
       const errors: string[] = [];
       const { email, password, confirm_password, token } = request.body;
+      // token expiration
       const _tokenExpires = new Date(new Date(Date.now()).getTime() - 8.64e7);
 
       // verify email & password format
@@ -463,38 +480,38 @@ const auth: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
   );
 
   // user refresh auth
-  fastify.post<{ Body: { refreshToken: string } }>(
-    "/refresh",
-    async function (request, reply) {
-      const errors: string[] = [];
-      const { refreshToken } = request.body;
-      const { authorization } = request.headers;
-      const authToken = authorization?.startsWith("Bearer ")
-        ? authorization.split(" ")[1]
-        : undefined;
+  fastify.post("/refresh", async function (request, reply) {
+    const errors: string[] = [];
+    const { refreshToken } = request.cookies;
+    const { authorization } = request.headers;
+    const authToken = authorization?.startsWith("Bearer ")
+      ? authorization.split(" ")[1]
+      : undefined;
 
-      if (!authToken?.length) errors.push("authentication required");
+    if (!authToken?.length) errors.push("authentication required");
 
-      if (!refreshToken?.length) errors.push("invalid session");
+    if (!refreshToken?.length) errors.push("invalid session");
 
-      if (errors.length)
-        return reply.code(403).send({
-          message: "Failed",
-          errors,
-        });
+    if (errors.length)
+      return reply.code(403).send({
+        message: "Failed",
+        errors,
+      });
 
-      const checkToken = JWT_Verifier(refreshToken);
+    const unsignedToken = refreshToken
+      ? fastify.unsignCookie(refreshToken).value
+      : undefined;
+    if (refreshToken && unsignedToken) {
+      const checkToken = JWT_Verifier(unsignedToken);
       if (!checkToken) errors.push("invalid or expired session token");
       try {
-        const tokenFromDb = checkToken
-          ? await prisma.session.findUnique({
-              where: {
-                token: refreshToken,
-                authToken,
-              },
-              include: { user: true },
-            })
-          : undefined;
+        const tokenFromDb = await prisma.session.findUnique({
+          where: {
+            token: unsignedToken,
+          },
+          include: { user: true },
+        });
+
         if (!tokenFromDb) errors.push("corrupted refresh token");
         if (tokenFromDb?.authToken !== authToken)
           errors.push("corrupted auth token");
@@ -529,14 +546,103 @@ const auth: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
           },
         });
 
-        return reply.code(200).send({
-          authToken: updatedSession?.authToken,
-          refreshToken: updatedSession?.token,
-          user: updatedSession?.user,
-        });
+        return reply
+          .code(200)
+          .setCookie("refreshToken", updatedSession?.token, {
+            httpOnly: true,
+          })
+          .send({
+            authToken: updatedSession?.authToken,
+            user: updatedSession?.user,
+          });
       } catch (error) {
         console.log(error);
         reply.internalServerError();
+      }
+    }
+  });
+
+  // user change password
+  fastify.post<{ Body: ChangeI }>(
+    "/change-password",
+    {
+      schema: {
+        body: Type.Object({
+          old_password: Type.String({ minLength: 6, maxLength: 40 }),
+          new_password: Type.String({ minLength: 6, maxLength: 40 }),
+          confirm_password: Type.String({ minLength: 6, maxLength: 40 }),
+        }),
+      },
+
+      preHandler: fastify.auth(
+        [
+          // @ts-ignore
+          fastify.authenticate,
+        ],
+        { run: "all" }
+      ),
+    },
+    async function (request, reply) {
+      const errors: string[] = [];
+      const { old_password, new_password, confirm_password } = request.body;
+
+      // password format
+      if (!checkPassword(new_password))
+        errors.push(
+          "new_password invalid password format 6+ characters, 1+ uppercase, 1+ symbols or number "
+        );
+
+      if (!checkPassword(old_password))
+        errors.push(
+          "old_password invalid password format 6+ characters, 1+ uppercase, 1+ symbols or number "
+        );
+
+      if (!checkMatchPassword(new_password, confirm_password))
+        errors.push(`passwords do not match`);
+
+      if (errors.length)
+        return reply.code(400).send({
+          message: "Login failed",
+          errors,
+        });
+
+      try {
+        const user = await prisma.user.findFirst({
+          where: {
+            profile: {
+              // @ts-ignore
+              id: request.user.userId,
+            },
+          },
+        });
+
+        if (user) {
+          const comparePassword = await fastify.bcrypt.compare(
+            old_password,
+            user.password
+          );
+
+          if (!comparePassword)
+            return reply.conflict(
+              "the given old_password does not match try reseting password"
+            );
+
+          await prisma.user.update({
+            where: {
+              id: user?.id,
+            },
+            data: {
+              password: await fastify.bcrypt.hash(new_password),
+            },
+          });
+
+          return {
+            message: "successfull",
+          };
+        }
+      } catch (error) {
+        console.log(error);
+        return reply.internalServerError();
       }
     }
   );
