@@ -1,4 +1,3 @@
-import { Studio } from "./../../../../node_modules/.prisma/client/index.d";
 import { Type } from "@sinclair/typebox";
 import { PrismaClient, Skill } from "@prisma/client";
 import { FastifyPluginAsync } from "fastify";
@@ -10,6 +9,61 @@ const artistRoute: FastifyPluginAsync = async (
   fastify,
   opts
 ): Promise<void> => {
+  // get my artist account
+  fastify.get(
+    "/",
+    {
+      preHandler: fastify.auth([
+        // @ts-ignore
+        fastify.authenticate,
+        // @ts-ignore
+        fastify.is_artist_admin,
+      ]),
+    },
+    async function (request, reply) {
+      try {
+        const artist = await prisma.artist.findUnique({
+          where: {
+            // @ts-ignore
+            profileId: request.user.userId,
+          },
+
+          include: {
+            profile: true,
+            skills: {
+              select: {
+                id: true,
+                name: true,
+                categoryId: true,
+              },
+            },
+            ratings: true,
+            works: true,
+            _count: {
+              select: {
+                works: true,
+                favourites: true,
+                ratings: true,
+              },
+            },
+          },
+        });
+
+        const rating = artist?.ratings.map((r) => r.rating);
+
+        return {
+          artist: {
+            ...artist,
+            rating: average(rating ?? []),
+          },
+        };
+      } catch (error) {
+        console.log(error);
+        return reply.internalServerError();
+      }
+    }
+  );
+
   // get all artists
   fastify.get<{ Querystring: { page?: number } }>(
     "/get-all",
@@ -60,6 +114,7 @@ const artistRoute: FastifyPluginAsync = async (
         return {
           artists: artistWithRating,
           total: count,
+          pages: count / PAGINATION_ITEMS,
         };
       } catch (error) {
         console.log(error);
@@ -68,9 +123,9 @@ const artistRoute: FastifyPluginAsync = async (
     }
   );
 
-  // get all artists by skill
+  // get all artists by skill id
   fastify.get<{ Querystring: { page?: number }; Params: { skill?: string } }>(
-    "/get-all/s/:skill",
+    "/get-all/skill/s/:skill",
     {
       schema: {
         querystring: Type.Optional(
@@ -136,6 +191,84 @@ const artistRoute: FastifyPluginAsync = async (
         return {
           artists: artistWithRating,
           total: count,
+          pages: count / PAGINATION_ITEMS,
+        };
+      } catch (error) {
+        console.log(error);
+        return reply.internalServerError();
+      }
+    }
+  );
+
+  // get all artists by skill name
+  fastify.get<{ Querystring: { page?: number }; Params: { skill?: string } }>(
+    "/get-all/skill/:skill",
+    {
+      schema: {
+        querystring: Type.Optional(
+          Type.Object({
+            page: Type.Optional(Type.Number({ default: 1 })),
+          })
+        ),
+        params: Type.Optional(
+          Type.Object({
+            skill: Type.Optional(Type.String({ minLength: 2, maxLength: 200 })),
+          })
+        ),
+      },
+    },
+    async function (request, reply) {
+      const { skill } = request.params;
+      const { page } = request.query;
+
+      const count = await prisma.artist.count({
+        where: {
+          skills: {
+            some: { name: skill },
+          },
+        },
+      });
+      const skip = page ? Number(page - 1) * PAGINATION_ITEMS : 0;
+      try {
+        const artists = await prisma.artist.findMany({
+          skip,
+          take: PAGINATION_ITEMS,
+          where: {
+            skills: {
+              some: {
+                id: skill,
+              },
+            },
+          },
+          include: {
+            profile: true,
+            skills: {
+              select: {
+                id: true,
+                name: true,
+                categoryId: true,
+              },
+            },
+            ratings: true,
+            _count: {
+              select: {
+                works: true,
+              },
+            },
+          },
+        });
+
+        const artistWithRating = artists.map((e) => {
+          const rating = e.ratings.map((r) => r.rating);
+          return {
+            ...e,
+            rating: average(rating),
+          };
+        });
+        return {
+          artists: artistWithRating,
+          total: count,
+          pages: count / PAGINATION_ITEMS,
         };
       } catch (error) {
         console.log(error);
@@ -152,6 +285,8 @@ const artistRoute: FastifyPluginAsync = async (
         [
           // @ts-ignore
           fastify.authenticate,
+          // @ts-ignore
+          fastify.is_artist_admin,
         ],
         { run: "all" }
       ),
@@ -165,6 +300,13 @@ const artistRoute: FastifyPluginAsync = async (
           },
         });
         if (!deletedArtist) return reply.forbidden();
+
+        await prisma.artist.delete({
+          where: {
+            // @ts-ignore
+            profileId: request.user.userId,
+          },
+        });
 
         return {
           message: "successful",
@@ -509,7 +651,6 @@ const artistRoute: FastifyPluginAsync = async (
       ),
     },
     async function (request, reply) {
-      if (!request.body.id) return reply.notAcceptable("skill id is required");
       // check disconnect skill from artist
       try {
         const artist = await prisma.artist.update({
@@ -540,9 +681,93 @@ const artistRoute: FastifyPluginAsync = async (
     }
   );
 
-  // get all artist work
+  // get all artist work by artist name
   fastify.get<{ Params: { artist: string }; Querystring: { page?: number } }>(
     "/:artist/all-works",
+    {
+      schema: {
+        querystring: Type.Optional(
+          Type.Object({
+            page: Type.Optional(Type.Number({ default: 1 })),
+          })
+        ),
+        params: Type.Optional(
+          Type.Object({
+            artist: Type.String({ minLength: 2, maxLength: 200 }),
+          })
+        ),
+      },
+    },
+    async function (request, reply) {
+      const { page } = request.query;
+      const { artist } = request.params;
+
+      const count = await prisma.work.count({
+        where: {
+          artist: {
+            profile: {
+              display_name: artist,
+            },
+          },
+        },
+      });
+      const skip = page ? Number(page - 1) * PAGINATION_ITEMS : 0;
+
+      try {
+        const works = await prisma.work.findMany({
+          skip,
+          take: PAGINATION_ITEMS,
+          where: {
+            artist: {
+              profile: {
+                display_name: artist,
+              },
+            },
+          },
+          include: {
+            artist: {
+              select: {
+                profile: {
+                  select: {
+                    display_name: true,
+                    id: true,
+                  },
+                },
+              },
+            },
+            skills: true,
+            reviews: true,
+            _count: {
+              select: {
+                reviews: true,
+              },
+            },
+          },
+        });
+
+        const worksWithRating = works.map((e) => {
+          const rating = e.reviews.map((r) => r.rating);
+          return {
+            ...e,
+            rating: average(rating),
+          };
+        });
+
+        return {
+          works: worksWithRating,
+          total: count,
+          pages: count / PAGINATION_ITEMS,
+        };
+      } catch (error) {
+        console.log(error);
+        return reply.internalServerError();
+      }
+    }
+  );
+
+  // get all artist work by artist id
+  fastify.get<{ Params: { artist: string }; Querystring: { page?: number } }>(
+    "/a/:artist/all-works",
     {
       schema: {
         querystring: Type.Optional(
@@ -587,7 +812,6 @@ const artistRoute: FastifyPluginAsync = async (
               },
             },
             skills: true,
-            reactions: true,
             reviews: true,
             _count: {
               select: {
@@ -608,6 +832,7 @@ const artistRoute: FastifyPluginAsync = async (
         return {
           works: worksWithRating,
           total: count,
+          pages: count / PAGINATION_ITEMS,
         };
       } catch (error) {
         console.log(error);
@@ -616,43 +841,54 @@ const artistRoute: FastifyPluginAsync = async (
     }
   );
 
-  fastify.post<{ Body: Studio }>(
-    "create-studio",
+  // get all my orders
+  fastify.get<{ Querystring: { page?: number } }>(
+    "/get-orders",
     {
       schema: {
-        body: Type.Object({
-          name: Type.String({ minLength: 2, maxLength: 100 }),
-          description: Type.Optional(Type.String({ minLength: 2 })),
-        }),
+        querystring: Type.Optional(
+          Type.Object({
+            page: Type.Optional(Type.Number({ default: 1 })),
+          })
+        ),
       },
-      preHandler: fastify.auth(
-        [
-          // @ts-ignore
-          fastify.authenticate,
-          // @ts-ignore
-          fastify.is_artist_admin,
-        ],
-        { run: "all" }
-      ),
+      preHandler: fastify.auth([
+        // @ts-ignore
+        fastify.authenticate,
+      ]),
     },
     async function (request, reply) {
-      const { name, description } = request.body;
       try {
-        await prisma.studio.create({
-          data: {
-            artist: {
-              connect: {
+        const count = await prisma.order.count({
+          where: {
+            // @ts-ignore
+            userId: request.user.userId,
+          },
+        });
+        const { page } = request.query;
+        const skip = page ? Number(page - 1) * PAGINATION_ITEMS : 0;
+
+        const orders = await prisma.order.groupBy({
+          by: ["status", "createdAt"],
+          skip,
+          take: PAGINATION_ITEMS,
+          where: {
+            OR: [
+              {
                 // @ts-ignore
-                profileId: request.user.userId,
+                userId: request.user.userId,
               },
-            },
-            name,
-            description,
+            ],
+          },
+          orderBy: {
+            createdAt: "asc",
           },
         });
 
         return {
-          message: "successful",
+          orders,
+          total: count,
+          pages: count / PAGINATION_ITEMS,
         };
       } catch (error) {
         console.log(error);
@@ -661,9 +897,9 @@ const artistRoute: FastifyPluginAsync = async (
     }
   );
 
-  // get artist
+  // get artist by id
   fastify.get<{ Params: { artist: string } }>(
-    "/:artist",
+    "/a/:artist",
     {
       schema: {
         params: Type.Object({
@@ -677,6 +913,61 @@ const artistRoute: FastifyPluginAsync = async (
       try {
         const artistData = await prisma.artist.findUnique({
           where: { id: artist },
+          include: {
+            profile: true,
+            skills: {
+              select: {
+                id: true,
+                name: true,
+                categoryId: true,
+              },
+            },
+            ratings: true,
+            works: true,
+            _count: {
+              select: {
+                works: true,
+                favourites: true,
+              },
+            },
+          },
+        });
+
+        const rating = artistData?.ratings.map((r) => r.rating);
+        return {
+          artist: {
+            ...artistData,
+            rating: rating ? average(rating) : undefined,
+          },
+        };
+      } catch (error) {
+        console.log(error);
+        // @ts-ignore
+        return reply.internalServerError();
+      }
+    }
+  );
+
+  // get artist by display_name
+  fastify.get<{ Params: { artist: string } }>(
+    "/:artist",
+    {
+      schema: {
+        params: Type.Object({
+          artist: Type.String({ minLength: 2, maxLength: 200 }),
+        }),
+      },
+    },
+    async function (request, reply) {
+      const { artist } = request.params;
+
+      try {
+        const artistData = await prisma.artist.findFirst({
+          where: {
+            profile: {
+              display_name: artist,
+            },
+          },
           include: {
             profile: true,
             skills: {

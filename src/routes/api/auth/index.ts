@@ -318,6 +318,40 @@ const auth: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
     }
   );
 
+  // user logout
+  fastify.post(
+    "/logout",
+    {
+      preHandler: fastify.auth(
+        [
+          // @ts-ignore
+          fastify.authenticate,
+        ],
+        { run: "all" }
+      ),
+    },
+    async function (request, reply) {
+      // @ts-ignore
+      const authToken = request.user.token;
+      try {
+        const session = await prisma.session.update({
+          where: {
+            authToken,
+          },
+          data: {
+            expired: true,
+          },
+        });
+        return reply.code(session ? 200 : 500).send({
+          message: session.expired ? "Logout successful" : "Logout failed",
+        });
+      } catch (error) {
+        console.log(error);
+        return reply.internalServerError("Logout failed");
+      }
+    }
+  );
+
   // user forgot password request for token
   fastify.post<{ Body: { email: string } }>(
     "/forgotten-password",

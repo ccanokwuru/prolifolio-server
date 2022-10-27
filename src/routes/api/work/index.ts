@@ -1,5 +1,4 @@
-import { Comment } from "./../../../../node_modules/.prisma/client/index.d";
-import { PrismaClient, Review, SELLAS } from "@prisma/client";
+import { Bidding, Comment, PrismaClient, Review, SELLAS } from "@prisma/client";
 import { Type } from "@sinclair/typebox";
 import { FastifyPluginAsync } from "fastify";
 import { WorkI } from "../../../types";
@@ -53,17 +52,12 @@ const workRoute: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
                 },
               },
             },
-            studio: {
-              select: {
-                name: true,
-                id: true,
-              },
-            },
-            reactions: true,
+
             reviews: true,
             _count: {
               select: {
                 biddings: true,
+                views: true,
               },
             },
           },
@@ -83,6 +77,7 @@ const workRoute: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
         return {
           works: worksWithRating,
           total: count,
+          pages: count / PAGINATION_ITEMS,
         };
       } catch (error) {
         console.log(error);
@@ -157,17 +152,12 @@ const workRoute: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
                 },
               },
             },
-            studio: {
-              select: {
-                name: true,
-                id: true,
-              },
-            },
-            reactions: true,
+
             reviews: true,
             _count: {
               select: {
                 biddings: true,
+                views: true,
               },
             },
           },
@@ -187,6 +177,7 @@ const workRoute: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
         return {
           works: worksWithRating,
           total: count,
+          pages: count / PAGINATION_ITEMS,
         };
       } catch (error) {
         console.log(error);
@@ -202,7 +193,7 @@ const workRoute: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
       schema: {
         body: Type.Object({
           title: Type.String({ minLength: 2, maxLength: 200 }),
-          categoryId: Type.String({ format: "uuid" }),
+          categoryId: Type.Optional(Type.String({ format: "uuid" })),
           description: Type.String({ minLength: 2 }),
           price: Type.Optional(Type.String()),
           currency: Type.Optional(Type.String({ minLength: 2, maxLength: 10 })),
@@ -245,7 +236,6 @@ const workRoute: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
         allIds.push({ id });
       });
 
-      // check if skill already exit under the same category connect or create skill
       try {
         const work = await prisma.work.create({
           data: {
@@ -257,11 +247,11 @@ const workRoute: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
             files,
             category: {
               connect: {
-                id: categoryId,
+                id: categoryId ?? undefined,
               },
             },
             artist: {
-              connectOrCreate: {
+              connect: {
                 // @ts-ignore
                 profileId: request.user.userId,
               },
@@ -272,14 +262,13 @@ const workRoute: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
           },
           include: {
             artist: true,
-            studio: true,
           },
         });
 
-        return {
+        return reply.code(201).send({
           message: "successful",
           work,
-        };
+        });
       } catch (error) {
         console.log(error);
         return reply.internalServerError();
@@ -297,7 +286,7 @@ const workRoute: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
         }),
         body: Type.Object({
           title: Type.String({ minLength: 2, maxLength: 200 }),
-          categoryId: Type.String({ format: "uuid" }),
+          categoryId: Type.Optional(Type.String({ format: "uuid" })),
           description: Type.String({ minLength: 2 }),
           price: Type.Optional(Type.String()),
           currency: Type.Optional(Type.String({ minLength: 2, maxLength: 10 })),
@@ -372,18 +361,14 @@ const workRoute: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
             currency,
             sellAs,
             files,
-            category: {
-              connect: {
-                id: categoryId,
-              },
-            },
+            categoryId,
             skills: {
               connect: allIds,
             },
           },
           include: {
             artist: true,
-            studio: true,
+            skills: true,
           },
         });
 
@@ -438,7 +423,7 @@ const workRoute: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
         )
           return reply.unauthorized();
 
-        await prisma.artist.delete({
+        await prisma.work.delete({
           where: { id },
         });
         return {
@@ -523,9 +508,74 @@ const workRoute: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
     }
   );
 
-  // link to studio
+  // bid work
+  fastify.post<{ Params: { work: string }; Body: Bidding }>(
+    "/:work/bid",
+    {
+      schema: {
+        params: Type.Object({
+          work: Type.String({ format: "uuid" }),
+        }),
+        body: Type.Object({
+          offer: Type.Number(),
+        }),
+      },
+      preHandler: fastify.auth(
+        [
+          // @ts-ignore
+          fastify.authenticate,
+        ],
+        { run: "all" }
+      ),
+    },
+    async function (request, reply) {
+      const { work } = request.params;
+      const { offer } = request.body;
+
+      // check if skill already exit under the same category connect or create skill
+      try {
+        const workInDb = await prisma.work.findFirst({
+          where: {
+            id: work,
+          },
+        });
+
+        return !workInDb?.price
+          ? {
+              message: "this art work is not yet for sale",
+            }
+          : workInDb?.isSold
+          ? {
+              message: "sold out",
+            }
+          : !workInDb?.sellAs.includes(SELLAS.best_offer)
+          ? {
+              message: "you can only bid for this item",
+            }
+          : reply.code(201).send({
+              bidding: await prisma.bidding.create({
+                data: {
+                  workId: work,
+                  // @ts-ignore
+                  userId: request.user.userId,
+                  offer,
+                },
+                include: {
+                  work: true,
+                  user: true,
+                },
+              }),
+            });
+      } catch (error) {
+        console.log(error);
+        return reply.internalServerError();
+      }
+    }
+  );
+
+  // order work
   fastify.post<{ Params: { work: string } }>(
-    "/:work/link-studio",
+    "/:work/order",
     {
       schema: {
         params: Type.Object({
@@ -536,8 +586,6 @@ const workRoute: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
         [
           // @ts-ignore
           fastify.authenticate,
-          // @ts-ignore
-          fastify.is_artist_admin,
         ],
         { run: "all" }
       ),
@@ -551,36 +599,33 @@ const workRoute: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
           where: {
             id: work,
           },
-          include: {
-            artist: {
-              include: { studio: true },
-            },
-          },
         });
 
-        if (
-          // @ts-ignore
-          workInDb?.artist.profileId !== request.user.userId
-        )
-          return reply.unauthorized();
-
-        const workUpdate = await prisma.work.update({
-          where: {
-            id: work,
-          },
-          data: {
-            studio: {
-              connect: {
-                artistId: workInDb?.artistId,
-              },
-            },
-          },
-        });
-
-        return {
-          message: "successful",
-          work: workUpdate,
-        };
+        return !workInDb?.price
+          ? {
+              message: "this art work is not yet for sale",
+            }
+          : workInDb?.isSold
+          ? {
+              message: "sold out",
+            }
+          : !workInDb?.sellAs.includes("buy_now")
+          ? {
+              message: "you can only bid for this item",
+            }
+          : reply.code(201).send({
+              order: await prisma.order.create({
+                data: {
+                  workId: work,
+                  // @ts-ignore
+                  userId: request.user.userId,
+                },
+                include: {
+                  work: true,
+                  user: true,
+                },
+              }),
+            });
       } catch (error) {
         console.log(error);
         return reply.internalServerError();
@@ -617,7 +662,7 @@ const workRoute: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
 
       // check if skill already exit under the same category connect or create skill
       try {
-        const reviwInDb = await prisma.review.findFirst({
+        const reviewInDb = await prisma.review.findFirst({
           where: {
             // @ts-ignore
             userId: request.user.userId,
@@ -625,7 +670,7 @@ const workRoute: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
           },
         });
 
-        const workUpdate = reviwInDb
+        const workUpdate = reviewInDb
           ? await prisma.work.update({
               where: {
                 id: work,
@@ -634,7 +679,7 @@ const workRoute: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
                 reviews: {
                   update: {
                     where: {
-                      id: reviwInDb.id,
+                      id: reviewInDb.id,
                     },
                     data: {
                       rating,
@@ -661,25 +706,19 @@ const workRoute: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
                         id: true,
                       },
                     },
+                    skills: true,
                     _count: {
                       select: {
-                        skills: true,
                         works: true,
                       },
                     },
                   },
                 },
-                studio: {
-                  select: {
-                    name: true,
-                    id: true,
-                  },
-                },
-                reactions: true,
                 reviews: true,
                 _count: {
                   select: {
                     biddings: true,
+                    views: true,
                   },
                 },
               },
@@ -714,25 +753,19 @@ const workRoute: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
                         id: true,
                       },
                     },
+                    skills: true,
                     _count: {
                       select: {
-                        skills: true,
                         works: true,
                       },
                     },
                   },
                 },
-                studio: {
-                  select: {
-                    name: true,
-                    id: true,
-                  },
-                },
-                reactions: true,
                 reviews: true,
                 _count: {
                   select: {
                     biddings: true,
+                    views: true,
                   },
                 },
               },
@@ -950,13 +983,7 @@ const workRoute: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
                 },
               },
             },
-            studio: {
-              select: {
-                name: true,
-                id: true,
-              },
-            },
-            reactions: true,
+
             reviews: {
               include: {
                 comments: {
@@ -997,6 +1024,7 @@ const workRoute: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
             _count: {
               select: {
                 biddings: true,
+                views: true,
               },
             },
           },

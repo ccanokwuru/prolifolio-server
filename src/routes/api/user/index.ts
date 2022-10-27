@@ -1,6 +1,7 @@
 import { Type } from "@sinclair/typebox";
 import { Contact, PrismaClient, Profile } from "@prisma/client";
 import { FastifyPluginAsync } from "fastify";
+import { PAGINATION_ITEMS } from "../../../utils/paginationHelper";
 const prisma = new PrismaClient();
 
 interface UserData extends Profile {
@@ -10,12 +11,9 @@ interface UserData extends Profile {
 const userRoute: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
   // update user
   fastify.put<{ Params: { user: string }; Body: UserData }>(
-    "/:user/update",
+    "/update-profile",
     {
       schema: {
-        params: Type.Object({
-          user: Type.String({ format: "uuid" }),
-        }),
         body: Type.Object({
           email: Type.String({ format: "email", maxLength: 500 }),
           first_name: Type.String({ minLength: 2, maxLength: 200 }),
@@ -35,27 +33,13 @@ const userRoute: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
       ),
     },
     async function (request, reply) {
-      const { user } = request.params;
       const { email, first_name, last_name, other_name, avatar, display_name } =
         request.body;
 
       try {
-        const profileExist = await prisma.profile.findFirst({
-          where: {
-            id: user,
-            user: {
-              profile: {
-                // @ts-ignore
-                id: request.user.userId,
-              },
-            },
-          },
-        });
-
-        if (!profileExist) return reply.unauthorized();
-
         const profile = await prisma.profile.update({
-          where: { id: user },
+          // @ts-ignore
+          where: { id: request.user.userId },
           data: {
             first_name,
             last_name,
@@ -160,6 +144,118 @@ const userRoute: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
         return {
           message: "successful",
           artist,
+        };
+      } catch (error) {
+        console.log(error);
+        return reply.internalServerError();
+      }
+    }
+  );
+
+  // get all my orders
+  fastify.get<{ Querystring: { page?: number } }>(
+    "/get-jobs",
+    {
+      schema: {
+        querystring: Type.Optional(
+          Type.Object({
+            page: Type.Optional(Type.Number({ default: 1 })),
+          })
+        ),
+      },
+      preHandler: fastify.auth([
+        // @ts-ignore
+        fastify.authenticate,
+      ]),
+    },
+    async function (request, reply) {
+      try {
+        const count = await prisma.job.count({
+          where: {
+            // @ts-ignore
+            userId: request.user.userId,
+          },
+        });
+        const { page } = request.query;
+        const skip = page ? Number(page - 1) * PAGINATION_ITEMS : 0;
+
+        const orders = await prisma.job.groupBy({
+          by: ["categoryId", "createdAt"],
+          skip,
+          take: PAGINATION_ITEMS,
+          where: {
+            OR: [
+              {
+                // @ts-ignore
+                ownerId: request.user.userId,
+              },
+            ],
+          },
+          orderBy: {
+            createdAt: "asc",
+          },
+        });
+
+        return {
+          orders,
+          total: count,
+          pages: count / PAGINATION_ITEMS,
+        };
+      } catch (error) {
+        console.log(error);
+        return reply.internalServerError();
+      }
+    }
+  );
+
+  // get all my orders
+  fastify.get<{ Querystring: { page?: number } }>(
+    "/get-orders",
+    {
+      schema: {
+        querystring: Type.Optional(
+          Type.Object({
+            page: Type.Optional(Type.Number({ default: 1 })),
+          })
+        ),
+      },
+      preHandler: fastify.auth([
+        // @ts-ignore
+        fastify.authenticate,
+      ]),
+    },
+    async function (request, reply) {
+      try {
+        const count = await prisma.order.count({
+          where: {
+            // @ts-ignore
+            userId: request.user.userId,
+          },
+        });
+        const { page } = request.query;
+        const skip = page ? Number(page - 1) * PAGINATION_ITEMS : 0;
+
+        const orders = await prisma.order.groupBy({
+          by: ["status", "createdAt"],
+          skip,
+          take: PAGINATION_ITEMS,
+          where: {
+            OR: [
+              {
+                // @ts-ignore
+                userId: request.user.userId,
+              },
+            ],
+          },
+          orderBy: {
+            createdAt: "asc",
+          },
+        });
+
+        return {
+          orders,
+          total: count,
+          pages: count / PAGINATION_ITEMS,
         };
       } catch (error) {
         console.log(error);

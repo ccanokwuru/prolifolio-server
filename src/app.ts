@@ -8,6 +8,7 @@ import fastifyBcrypt from "fastify-bcrypt";
 import { FastifyCookieOptions } from "@fastify/cookie";
 import fastifyCookie = require("@fastify/cookie");
 import fastifyCors from "@fastify/cors";
+import websocketPlugin from "@fastify/websocket";
 
 export type AppOptions = {
   // Place your custom options for app below here.
@@ -33,7 +34,13 @@ const app: FastifyPluginAsync<AppOptions> = async (
   } as FastifyCookieOptions);
 
   fastify.register(fastifyBcrypt, {
-    saltWorkFactor: 10,
+    saltWorkFactor: Number(process.env.CRYPTO_SALT) || 10,
+  });
+
+  fastify.register(websocketPlugin, {
+    options: {
+      clientTracking: true,
+    },
   });
 
   fastify.register(fastifyAuth);

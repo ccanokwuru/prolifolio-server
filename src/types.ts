@@ -1,4 +1,4 @@
-import { Work } from "@prisma/client";
+import { Job, Work } from "@prisma/client";
 
 interface WorkI extends Work {
   files: {
@@ -8,4 +8,12 @@ interface WorkI extends Work {
   skills: string[];
 }
 
-export { WorkI };
+interface JobI extends Job {
+  budget: {
+    start: number;
+    end: number;
+    currency: string;
+  };
+}
+
+export { WorkI, JobI };

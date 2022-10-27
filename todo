@@ -4,9 +4,9 @@ routes
         login *
         logout *
         password *
-            forgotten
-            reset
-            update
+            forgotten *
+            reset *
+            update *
     user
         update-profile *
         contacts *
@@ -22,7 +22,7 @@ routes
         all *
         single *
         become-artist *
-        order  
+        order  *
             all
 
     work
@@ -41,9 +41,10 @@ routes
         react 
 
     order
-        update
-        delete
-        single
+        update *
+        delete *
+        single *
+        all
 
     post
         create
@@ -58,11 +59,17 @@ routes
         favourite
 
     job
-        create
-        update
-        delete
-        all
-        single
+        create *
+        update *
+        delete *
+        all *
+        single *
+        application
+            create *
+            update *
+            delete *
+            all *
+            single *
 
     message *
         send *
@@ -122,5 +129,5 @@ routes
         react
 
     payment
-        withcard
-        bank
+        paystack
+        flutterwave
