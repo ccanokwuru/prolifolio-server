@@ -86,6 +86,85 @@ const workRoute: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
     }
   );
 
+  // get all works and group category
+  fastify.get<{ Querystring: { page?: number } }>(
+    "/get-all/grouped",
+    {
+      schema: {
+        querystring: Type.Optional(
+          Type.Object({
+            page: Type.Optional(Type.Number({ default: 1 })),
+          })
+        ),
+      },
+    },
+    async function (request, reply) {
+      try {
+        const works = await prisma.category.findMany({
+          where: {
+            parentId: null,
+          },
+          include: {
+            categories: true,
+            works: {
+              include: {
+                skills: {
+                  select: {
+                    id: true,
+                    name: true,
+                    categoryId: true,
+                  },
+                },
+                artist: {
+                  select: {
+                    profile: {
+                      select: {
+                        display_name: true,
+                        id: true,
+                      },
+                    },
+                    _count: {
+                      select: {
+                        skills: true,
+                        works: true,
+                      },
+                    },
+                  },
+                },
+
+                reviews: true,
+                _count: {
+                  select: {
+                    biddings: true,
+                    views: true,
+                  },
+                },
+              },
+            },
+          },
+        });
+
+        const worksWithRating = works.map((category) => {
+          return {
+            ...category,
+            works: category.works.map((e) => {
+              const rating = e.reviews.map((r) => r.rating);
+              return {
+                ...e,
+                rating: average(rating),
+              };
+            }),
+          };
+        });
+
+        return worksWithRating;
+      } catch (error) {
+        console.log(error);
+        return reply.internalServerError();
+      }
+    }
+  );
+
   // get all works by skill
   fastify.get<{ Querystring: { page?: number }; Params: { skill: string } }>(
     "/get-all/s/:skill",
@@ -134,6 +213,123 @@ const workRoute: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
                 id: true,
                 name: true,
                 categoryId: true,
+              },
+            },
+            artist: {
+              select: {
+                profile: {
+                  select: {
+                    display_name: true,
+                    id: true,
+                  },
+                },
+                _count: {
+                  select: {
+                    skills: true,
+                    works: true,
+                  },
+                },
+              },
+            },
+
+            reviews: true,
+            _count: {
+              select: {
+                biddings: true,
+                views: true,
+              },
+            },
+          },
+          orderBy: {
+            createdAt: "asc",
+          },
+        });
+
+        const worksWithRating = works.map((e) => {
+          const rating = e.reviews.map((r) => r.rating);
+          return {
+            ...e,
+            rating: average(rating),
+          };
+        });
+
+        return {
+          works: worksWithRating,
+          total: count,
+          pages: count / PAGINATION_ITEMS,
+        };
+      } catch (error) {
+        console.log(error);
+        return reply.internalServerError();
+      }
+    }
+  );
+
+  // get all works by category
+  fastify.get<{ Querystring: { page?: number }; Params: { category: string } }>(
+    "/get-all/c/:category",
+    {
+      schema: {
+        querystring: Type.Optional(
+          Type.Object({
+            page: Type.Optional(Type.Number({ default: 1 })),
+          })
+        ),
+        params: Type.Optional(
+          Type.Object({
+            category: Type.Optional(
+              Type.String({ minLength: 2, maxLength: 200 })
+            ),
+          })
+        ),
+      },
+    },
+    async function (request, reply) {
+      const { page } = request.query;
+      const { category } = request.params;
+      console.log({ category });
+      try {
+        const count = await prisma.work.count({
+          where: {
+            OR: [
+              {
+                category: {
+                  name: {
+                    contains: category,
+                    mode: "insensitive",
+                  },
+                },
+              },
+              {
+                category: {
+                  name: {
+                    equals: category,
+                    mode: "insensitive",
+                  },
+                },
+              },
+            ],
+          },
+        });
+        const skip = page ? Number(page - 1) * PAGINATION_ITEMS : 0;
+
+        const works = await prisma.work.findMany({
+          skip,
+          take: PAGINATION_ITEMS,
+          where: {
+            category: {
+              name: {
+                contains: category,
+                mode: "insensitive",
+              },
+            },
+          },
+          include: {
+            skills: {
+              select: {
+                id: true,
+                name: true,
+                category: true,
               },
             },
             artist: {

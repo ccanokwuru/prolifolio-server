@@ -4,7 +4,6 @@ import { FastifyPluginAsync } from "fastify";
 import fastifyAuth from "@fastify/auth";
 import fastifyJwt from "@fastify/jwt";
 import fastifyBcrypt from "fastify-bcrypt";
-// import { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
 import { FastifyCookieOptions } from "@fastify/cookie";
 import fastifyCookie = require("@fastify/cookie");
 import fastifyCors from "@fastify/cors";

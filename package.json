@@ -44,6 +44,7 @@
     "fastify-cli": "^4.3.0",
     "fastify-multer": "^2.0.3",
     "fastify-plugin": "^3.0.0",
+    "lodash": "^4.17.21",
     "slugify": "^1.6.5"
   },
   "devDependencies": {

@@ -1,3 +1,4 @@
+import { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
 import { PrismaClient, Profile } from "@prisma/client";
 import { Type } from "@sinclair/typebox";
 import { FastifyPluginAsync } from "fastify";
@@ -33,7 +34,8 @@ interface ResetPasswordI extends LoginI {
   token: string;
 }
 
-const auth: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
+const auth: FastifyPluginAsync = async (server, opts): Promise<void> => {
+  const fastify = server.withTypeProvider<TypeBoxTypeProvider>();
   // user registration
   fastify.post<{ Body: RegisterI }>(
     "/register",
@@ -182,6 +184,7 @@ const auth: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
       // verify email & password format
       const emailCheck = checkEmail(email);
       const passwordCheck = checkPassword(password);
+      console.log({ email, password });
 
       if (!emailCheck) errors.push("invalid email format");
 

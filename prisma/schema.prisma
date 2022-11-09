@@ -60,7 +60,8 @@ model Profile {
   jobs          Job[]
   orders        Order[]
   wishlist      Work[]         @relation("Wishlist")
-  messages      Message[]
+  messages      Message[]      @relation("sender")
+  messages_read Message[]      @relation("readBy")
   notifications Notification[]
   biddings      Bidding[]
   user          User           @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
@@ -102,7 +103,7 @@ model Artist {
 model Category {
   id          String     @id @default(uuid()) @db.Uuid
   name        String     @unique @db.VarChar(100)
-  catergories Category[] @relation("CategoryToCategory")
+  categories  Category[] @relation("CategoryToCategory")
   skills      Skill[]
   works       Work[]
   jobs        Job[]
@@ -179,8 +180,8 @@ model Bidding {
   id        String   @id @default(uuid()) @db.Uuid
   work      Work     @relation(fields: [workId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   workId    String   @unique @db.Uuid
-  user      Profile  @relation(fields: [userId], references: [id], onDelete: SetNull, onUpdate: Cascade)
-  userId    String   @db.Uuid
+  user      Profile? @relation(fields: [userId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  userId    String?  @db.Uuid
   offer     Decimal  @db.Money
   status    BIDDING? @default(pending)
   createdAt DateTime @default(now())
@@ -265,13 +266,14 @@ model Notification {
 
 model Message {
   id          String    @id @default(uuid()) @db.Uuid
-  sender      Profile?  @relation(fields: [senderId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  sender      Profile?  @relation(name: "sender", fields: [senderId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   senderId    String?   @db.Uuid
   message     String
   replies     Message[] @relation("ReplyToMessage")
   p_message   Message?  @relation("ReplyToMessage", fields: [p_messageId], references: [id], onDelete: SetNull, onUpdate: Cascade)
   p_messageId String?   @db.Uuid
-  read        Boolean   @default(false)
+  forwarded   Boolean   @default(false)
+  readBy      Profile[] @relation(name: "readBy")
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   room        ChatRoom  @relation(fields: [roomId], references: [id])

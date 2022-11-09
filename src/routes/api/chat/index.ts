@@ -1,9 +1,17 @@
 import { Type } from "@sinclair/typebox";
-import { PrismaClient } from "@prisma/client";
+import { Message, PrismaClient, Profile } from "@prisma/client";
 import { FastifyPluginAsync } from "fastify";
 import { EventEmitter } from "stream";
 
 const emitter = new EventEmitter();
+
+interface WSSEVENT {
+  action: "join" | "new" | "delete" | "forward" | "new_room" | "disconnected";
+  room?: string;
+  participants?: Profile[];
+  user?: Profile;
+  message?: Message;
+}
 
 const prisma = new PrismaClient();
 const messagesRoute: FastifyPluginAsync = async (
@@ -27,26 +35,43 @@ const messagesRoute: FastifyPluginAsync = async (
       const wss = connection.socket;
       const wsServer = this.websocketServer;
 
+      const send = (data: WSSEVENT) => {
+        // @ts-ignore
+        if (data.participants?.find((e) => e.id === request.user.userId))
+          wss.send(JSON.stringify({ ...data, meta: "update" }));
+      };
+
       try {
-        wsServer.on("connection", async () => {
-          const chats = await prisma.chatRoom.findMany({
-            where: {
-              participants: {
-                some: {
-                  // @ts-ignore
-                  id: request.user.userId,
-                },
+        const chatRooms = await prisma.chatRoom.findMany({
+          where: {
+            participants: {
+              some: {
+                // @ts-ignore
+                id: request.user.userId,
               },
             },
-          });
-
-          wss.send({ chats });
+          },
         });
+        wss.send(
+          JSON.stringify({
+            meta: "all_chats",
+            chatRooms,
+          })
+        );
+
+        emitter.on("user_join", send);
+        emitter.on("new_message", send);
+        emitter.on("deleted_message", send);
+        emitter.on("user_join", send);
 
         // @ts-ignore
         wsServer.clients?.forEach((client) => {
-          if (client !== wss && client.readyState === 3)
-            client.broadcast("disconnected");
+          if (client !== wss && client.readyState === 3) {
+            const data: WSSEVENT = {
+              action: "disconnected",
+            };
+            client.send(JSON.stringify(data));
+          }
         });
       } catch (error) {
         console.log(error);
@@ -86,7 +111,11 @@ const messagesRoute: FastifyPluginAsync = async (
             participants: true,
           },
         });
-
+        emitter.emit("new_room", {
+          action: "new_room",
+          room: chat.id,
+          participants: chat?.participants,
+        });
         reply.code(201);
         return {
           chat,
@@ -120,13 +149,23 @@ const messagesRoute: FastifyPluginAsync = async (
       const wss = connection.socket;
       const wsServer = this.websocketServer;
 
-      const broadcast = (data: any) =>
+      // const sendToAll = (data: WSSEVENT) => {
+      //   // @ts-ignore
+      //   wsServer.clients?.forEach((client) => {
+      //     if (client.readyState === 1) client.send(JSON.stringify({ data }));
+      //   });
+      // };
+
+      const broadcast = (data: any) => {
         // @ts-ignore
         wsServer.clients?.forEach((client) => {
           if (client.readyState === 1) client.send(JSON.stringify({ data }));
         });
+      };
 
-      const send = (data: any) => wss.send(JSON.stringify({ data }));
+      const send = (data: any) => {
+        wss.send(JSON.stringify({ data }));
+      };
 
       wss.on("message", async (m: string) => {
         const dataString = m.toString();
@@ -161,8 +200,15 @@ const messagesRoute: FastifyPluginAsync = async (
               payload: { conversation },
             });
 
-            // @ts-ignore
-            emitter.emit("user_join", { room, userId: request.user.userId });
+            emitter.emit("user_join", {
+              action: "join",
+              room,
+              participants: conversation?.participants,
+              user: await prisma.profile.findFirst({
+                // @ts-ignore
+                where: { userId: request.user.userId },
+              }),
+            });
           } else if (isParticipant && meta === "message") {
             if (data.type === "new" || data.type === "reply") {
               const chats =
@@ -225,45 +271,95 @@ const messagesRoute: FastifyPluginAsync = async (
               broadcast({
                 meta: "new",
                 payload: {
+                  action: "new",
+                  room,
+                  participants: conversation?.participants,
+                  user: await prisma.profile.findFirst({
+                    // @ts-ignore
+                    where: { userId: request.user.userId },
+                  }),
                   message: recent,
                 },
               });
               emitter.emit("new_message", {
+                action: "new",
                 room,
+                participants: conversation?.participants,
+                user: await prisma.profile.findFirst({
+                  // @ts-ignore
+                  where: { userId: request.user.userId },
+                }),
                 message: recent,
               });
             } else if (data.type === "delete") {
-              await prisma.chatRoom.update({
+              const message = await prisma.message.findFirst({
                 where: {
-                  id: room,
-                },
-                data: {
-                  messages: {
-                    delete: {
-                      id: data.messageId,
+                  id: data.messageId,
+                  room: {
+                    participants: {
+                      some: {
+                        // @ts-ignore
+                        id: request.user.userId,
+                      },
                     },
                   },
                 },
               });
+              if (message)
+                await prisma.chatRoom.update({
+                  where: {
+                    id: room,
+                  },
+                  data: {
+                    messages: {
+                      delete: {
+                        id: data.messageId,
+                      },
+                    },
+                  },
+                });
+
               broadcast({
                 meta: "delete",
-                payload: { messageId: data.messageId },
-              });
-              emitter.emit("deleted_message", {
-                room,
-                // @ts-ignore
-                userId: request.user.userId,
-                messageId: data.messageId,
-              });
-            } else if (data.type === "forward") {
-              const originalMessage = await prisma.message.findUnique({
-                where: {
-                  id: data.meassageId,
+                payload: {
+                  action: "delete",
+                  room,
+                  participants: conversation?.participants,
+                  user: await prisma.profile.findFirst({
+                    // @ts-ignore
+                    where: { userId: request.user.userId },
+                  }),
+                  message,
                 },
               });
 
-              if (originalMessage)
-                await prisma.chatRoom.update({
+              // emitter.emit("deleted_message", {
+              //   action: "delete",
+              //   room,
+              //   participants: conversation?.participants,
+              //   user: await prisma.profile.findFirst({
+              //     // @ts-ignore
+              //     where: { userId: request.user.userId },
+              //   }),
+              //   message,
+              // });
+            } else if (data.type === "forward") {
+              const originalMessage = await prisma.message.findFirst({
+                where: {
+                  id: data.meassageId,
+                  room: {
+                    participants: {
+                      some: {
+                        // @ts-ignore
+                        id: request.user.userId,
+                      },
+                    },
+                  },
+                },
+              });
+
+              if (originalMessage) {
+                const chats = await prisma.chatRoom.update({
                   where: { id: data.forwardTo },
                   data: {
                     messages: {
@@ -274,19 +370,38 @@ const messagesRoute: FastifyPluginAsync = async (
                       },
                     },
                   },
+                  include: {
+                    messages: true,
+                  },
                 });
-              wss.send({
-                meta: "forward",
-                payload: {
-                  to: originalMessage?.roomId,
-                  message: originalMessage?.message,
-                },
-              });
 
-              emitter.emit("new_message", {
-                room: data.forwardTo,
-                messageId: data.messageId,
-              });
+                const recent = chats?.messages[chats?.messages.length - 1];
+                send({
+                  meta: "forward",
+                  payload: {
+                    action: "forward",
+                    room,
+                    to: data.forwardTo,
+                    message: recent,
+                    participants: conversation?.participants,
+                    user: await prisma.profile.findFirst({
+                      // @ts-ignore
+                      where: { userId: request.user.userId },
+                    }),
+                  },
+                });
+
+                emitter.emit("new_message", {
+                  action: "new",
+                  room,
+                  participants: conversation?.participants,
+                  user: await prisma.profile.findFirst({
+                    // @ts-ignore
+                    where: { userId: request.user.userId },
+                  }),
+                  message: recent,
+                });
+              }
             }
           }
         } catch (error) {
@@ -297,7 +412,7 @@ const messagesRoute: FastifyPluginAsync = async (
       // @ts-ignore
       wsServer.clients?.forEach((client) => {
         if (client !== wss && client.readyState === 3)
-          client.broadcast("disconnected");
+          client.send("disconnected");
       });
     }
   );
