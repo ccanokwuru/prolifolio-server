@@ -199,7 +199,7 @@ const userRoute: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
         return {
           orders,
           total: count,
-          pages: count / PAGINATION_ITEMS,
+          pages: Math.ceil(count / PAGINATION_ITEMS),
         };
       } catch (error) {
         console.log(error);
@@ -255,7 +255,7 @@ const userRoute: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
         return {
           orders,
           total: count,
-          pages: count / PAGINATION_ITEMS,
+          pages: Math.ceil(count / PAGINATION_ITEMS),
         };
       } catch (error) {
         console.log(error);

@@ -114,7 +114,7 @@ const artistRoute: FastifyPluginAsync = async (
         return {
           artists: artistWithRating,
           total: count,
-          pages: count / PAGINATION_ITEMS,
+          pages: Math.ceil(count / PAGINATION_ITEMS),
         };
       } catch (error) {
         console.log(error);
@@ -191,7 +191,7 @@ const artistRoute: FastifyPluginAsync = async (
         return {
           artists: artistWithRating,
           total: count,
-          pages: count / PAGINATION_ITEMS,
+          pages: Math.ceil(count / PAGINATION_ITEMS),
         };
       } catch (error) {
         console.log(error);
@@ -268,7 +268,7 @@ const artistRoute: FastifyPluginAsync = async (
         return {
           artists: artistWithRating,
           total: count,
-          pages: count / PAGINATION_ITEMS,
+          pages: Math.ceil(count / PAGINATION_ITEMS),
         };
       } catch (error) {
         console.log(error);
@@ -756,7 +756,7 @@ const artistRoute: FastifyPluginAsync = async (
         return {
           works: worksWithRating,
           total: count,
-          pages: count / PAGINATION_ITEMS,
+          pages: Math.ceil(count / PAGINATION_ITEMS),
         };
       } catch (error) {
         console.log(error);
@@ -832,7 +832,7 @@ const artistRoute: FastifyPluginAsync = async (
         return {
           works: worksWithRating,
           total: count,
-          pages: count / PAGINATION_ITEMS,
+          pages: Math.ceil(count / PAGINATION_ITEMS),
         };
       } catch (error) {
         console.log(error);
@@ -888,7 +888,7 @@ const artistRoute: FastifyPluginAsync = async (
         return {
           orders,
           total: count,
-          pages: count / PAGINATION_ITEMS,
+          pages: Math.ceil(count / PAGINATION_ITEMS),
         };
       } catch (error) {
         console.log(error);

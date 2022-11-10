@@ -43,7 +43,7 @@ const jobRoute: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
         return {
           jobs,
           total: count,
-          pages: count / PAGINATION_ITEMS,
+          pages: Math.ceil(count / PAGINATION_ITEMS),
         };
       } catch (error) {
         console.log(error);
@@ -103,7 +103,7 @@ const jobRoute: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
         return {
           jobs,
           total: count,
-          pages: count / PAGINATION_ITEMS,
+          pages: Math.ceil(count / PAGINATION_ITEMS),
         };
       } catch (error) {
         console.log(error);
@@ -402,7 +402,7 @@ const jobRoute: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
         return {
           applications,
           total: count,
-          pages: count / PAGINATION_ITEMS,
+          pages: Math.ceil(count / PAGINATION_ITEMS),
         };
       } catch (error) {
         console.log(error);

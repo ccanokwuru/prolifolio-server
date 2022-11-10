@@ -77,7 +77,7 @@ const workRoute: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
         return {
           works: worksWithRating,
           total: count,
-          pages: count / PAGINATION_ITEMS,
+          pages: Math.ceil(count / PAGINATION_ITEMS),
         };
       } catch (error) {
         console.log(error);
@@ -256,7 +256,7 @@ const workRoute: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
         return {
           works: worksWithRating,
           total: count,
-          pages: count / PAGINATION_ITEMS,
+          pages: Math.ceil(count / PAGINATION_ITEMS),
         };
       } catch (error) {
         console.log(error);
@@ -266,8 +266,8 @@ const workRoute: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
   );
 
   // get all works by category
-  fastify.get<{ Querystring: { page?: number }; Params: { category: string } }>(
-    "/get-all/c/:category",
+  fastify.post<{ Querystring: { page?: number }; Body: { category: string } }>(
+    "/get-all/c",
     {
       schema: {
         querystring: Type.Optional(
@@ -275,7 +275,7 @@ const workRoute: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
             page: Type.Optional(Type.Number({ default: 1 })),
           })
         ),
-        params: Type.Optional(
+        body: Type.Optional(
           Type.Object({
             category: Type.Optional(
               Type.String({ minLength: 2, maxLength: 200 })
@@ -286,7 +286,7 @@ const workRoute: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
     },
     async function (request, reply) {
       const { page } = request.query;
-      const { category } = request.params;
+      const { category } = request.body;
       console.log({ category });
       try {
         const count = await prisma.work.count({
@@ -362,6 +362,12 @@ const workRoute: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
           },
         });
 
+        const cat = await prisma.category.findUnique({
+          where: {
+            name: category,
+          },
+        });
+
         const worksWithRating = works.map((e) => {
           const rating = e.reviews.map((r) => r.rating);
           return {
@@ -371,9 +377,109 @@ const workRoute: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
         });
 
         return {
+          ...cat,
           works: worksWithRating,
           total: count,
-          pages: count / PAGINATION_ITEMS,
+          pages: Math.ceil(count / PAGINATION_ITEMS),
+        };
+      } catch (error) {
+        console.log(error);
+        return reply.internalServerError();
+      }
+    }
+  );
+
+  // get all works by category
+  fastify.get<{ Querystring: { page?: number }; Params: { category: string } }>(
+    "/get-all/cid/:category",
+    {
+      schema: {
+        querystring: Type.Optional(
+          Type.Object({
+            page: Type.Optional(Type.Number({ default: 1 })),
+          })
+        ),
+        params: Type.Optional(
+          Type.Object({
+            category: Type.Optional(Type.String({ format: "uuid" })),
+          })
+        ),
+      },
+    },
+    async function (request, reply) {
+      const { page } = request.query;
+      const { category } = request.params;
+      console.log({ category });
+      try {
+        const count = await prisma.work.count({
+          where: {
+            categoryId: category,
+          },
+        });
+        const skip = page ? Number(page - 1) * PAGINATION_ITEMS : 0;
+
+        const works = await prisma.work.findMany({
+          skip,
+          take: PAGINATION_ITEMS,
+          where: {
+            categoryId: category,
+          },
+          include: {
+            skills: {
+              select: {
+                id: true,
+                name: true,
+                category: true,
+              },
+            },
+            artist: {
+              select: {
+                profile: {
+                  select: {
+                    display_name: true,
+                    id: true,
+                  },
+                },
+                _count: {
+                  select: {
+                    skills: true,
+                    works: true,
+                  },
+                },
+              },
+            },
+
+            reviews: true,
+            _count: {
+              select: {
+                biddings: true,
+                views: true,
+              },
+            },
+          },
+          orderBy: {
+            createdAt: "asc",
+          },
+        });
+        const cat = await prisma.category.findUnique({
+          where: {
+            id: category,
+          },
+        });
+
+        const worksWithRating = works.map((e) => {
+          const rating = e.reviews.map((r) => r.rating);
+          return {
+            ...e,
+            rating: average(rating),
+          };
+        });
+
+        return {
+          ...cat,
+          works: worksWithRating,
+          total: count,
+          pages: Math.ceil(count / PAGINATION_ITEMS),
         };
       } catch (error) {
         console.log(error);
