@@ -923,7 +923,6 @@ const artistRoute: FastifyPluginAsync = async (
               },
             },
             ratings: true,
-            works: true,
             _count: {
               select: {
                 works: true,
@@ -978,7 +977,6 @@ const artistRoute: FastifyPluginAsync = async (
               },
             },
             ratings: true,
-            works: true,
             _count: {
               select: {
                 works: true,

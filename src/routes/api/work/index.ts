@@ -1271,12 +1271,7 @@ const workRoute: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
             },
             artist: {
               select: {
-                profile: {
-                  select: {
-                    display_name: true,
-                    id: true,
-                  },
-                },
+                profile: true,
                 _count: {
                   select: {
                     skills: true,
