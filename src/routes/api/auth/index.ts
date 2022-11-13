@@ -279,6 +279,7 @@ const auth: FastifyPluginAsync = async (server, opts): Promise<void> => {
           .send({
             authToken,
             user: sessionUpdate.user,
+            refreshToken,
           });
       } catch (error) {
         console.log(error);
@@ -517,87 +518,102 @@ const auth: FastifyPluginAsync = async (server, opts): Promise<void> => {
   );
 
   // user refresh auth
-  fastify.post("/refresh", async function (request, reply) {
-    const errors: string[] = [];
-    const { refreshToken } = request.cookies;
-    const { authorization } = request.headers;
-    const authToken = authorization?.startsWith("Bearer ")
-      ? authorization.split(" ")[1]
-      : undefined;
+  fastify.post<{ Body: { refreshToken: string } }>(
+    "/refresh",
+    {
+      schema: {
+        body: Type.Object({
+          refreshToken: Type.String({ minLength: 10 }),
+        }),
+      },
+    },
+    async function (request, reply) {
+      const errors: string[] = [];
+      const { refreshToken } = request.body;
+      const { authorization } = request.headers;
+      const authToken = authorization?.startsWith("Bearer ")
+        ? authorization.split(" ")[1]
+        : undefined;
 
-    if (!authToken?.length) errors.push("authentication required");
+      if (!authToken?.length) errors.push("authentication required");
 
-    if (!refreshToken?.length) errors.push("invalid session");
+      if (!refreshToken?.length) errors.push("invalid session");
 
-    if (errors.length)
-      return reply.code(403).send({
-        message: "Failed",
-        errors,
-      });
-
-    const unsignedToken = refreshToken
-      ? fastify.unsignCookie(refreshToken).value
-      : undefined;
-    if (refreshToken && unsignedToken) {
-      const checkToken = JWT_Verifier(unsignedToken);
-      if (!checkToken) errors.push("invalid or expired session token");
-      try {
-        const tokenFromDb = await prisma.session.findUnique({
-          where: {
-            token: unsignedToken,
-          },
-          include: { user: true },
+      if (errors.length)
+        return reply.code(403).send({
+          message: "Failed",
+          errors,
         });
 
-        if (!tokenFromDb) errors.push("corrupted refresh token");
-        if (tokenFromDb?.authToken !== authToken)
-          errors.push("corrupted auth token");
-        if (errors.length)
-          return reply.code(checkToken ? 403 : 401).send({
-            message: "Failed",
-            errors,
+      // const unsignedToken = refreshToken
+      //   ? fastify.unsignCookie(refreshToken).value
+      //   : undefined;
+
+      console.log({ refreshToken });
+      if (refreshToken) {
+        const checkToken = JWT_Verifier(refreshToken);
+        if (!checkToken) errors.push("invalid or expired session token");
+        try {
+          const tokenFromDb = await prisma.session.findUnique({
+            where: {
+              token: refreshToken,
+            },
+            include: { user: true },
           });
 
-        const updatedSession = await prisma.session.update({
-          where: {
-            token: tokenFromDb?.token,
-          },
-          data: {
-            authToken: await fastify.jwt.sign({
-              session: tokenFromDb?.id,
-              role: tokenFromDb?.user?.role,
-            }),
-          },
-          select: {
-            authToken: true,
-            token: true,
-            user: {
-              select: {
-                id: true,
-                email: true,
-                role: true,
-                createdAt: true,
-                updatedAt: true,
+          if (!tokenFromDb) errors.push("corrupted refresh token");
+          if (tokenFromDb?.authToken !== authToken)
+            errors.push("corrupted auth token");
+          if (errors.length)
+            return reply.code(checkToken ? 403 : 401).send({
+              message: "Failed",
+              errors,
+            });
+
+          const updatedSession = await prisma.session.update({
+            where: {
+              token: tokenFromDb?.token,
+            },
+            data: {
+              authToken: await fastify.jwt.sign({
+                session: tokenFromDb?.id,
+                role: tokenFromDb?.user?.role,
+              }),
+            },
+            select: {
+              authToken: true,
+              token: true,
+              user: {
+                select: {
+                  id: true,
+                  email: true,
+                  role: true,
+                  createdAt: true,
+                  updatedAt: true,
+                },
               },
             },
-          },
-        });
-
-        return reply
-          .code(200)
-          .setCookie("refreshToken", updatedSession?.token, {
-            httpOnly: true,
-          })
-          .send({
-            authToken: updatedSession?.authToken,
-            user: updatedSession?.user,
           });
-      } catch (error) {
-        console.log(error);
-        reply.internalServerError();
+
+          console.log({ updatedSession });
+
+          return reply
+            .code(200)
+            .setCookie("refreshToken", updatedSession?.token, {
+              httpOnly: true,
+            })
+            .send({
+              authToken: updatedSession?.authToken,
+              user: updatedSession?.user,
+              refreshToken: updatedSession?.token,
+            });
+        } catch (error) {
+          console.log(error);
+          reply.internalServerError();
+        }
       }
     }
-  });
+  );
 
   // user change password
   fastify.post<{ Body: ChangeI }>(

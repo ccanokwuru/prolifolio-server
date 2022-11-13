@@ -27,6 +27,7 @@ const app: FastifyPluginAsync<AppOptions> = async (
   fastify.register(fastifyCookie, {
     secret: process.env.COOKIE_SECRET,
     parseOptions: {
+      domain: "*",
       path: "/",
       signed: true,
     },

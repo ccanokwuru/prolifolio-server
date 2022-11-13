@@ -706,7 +706,10 @@ const artistRoute: FastifyPluginAsync = async (
         where: {
           artist: {
             profile: {
-              display_name: artist,
+              display_name: {
+                equals: artist,
+                mode: "insensitive",
+              },
             },
           },
         },
@@ -720,7 +723,10 @@ const artistRoute: FastifyPluginAsync = async (
           where: {
             artist: {
               profile: {
-                display_name: artist,
+                display_name: {
+                  equals: artist,
+                  mode: "insensitive",
+                },
               },
             },
           },
@@ -964,7 +970,10 @@ const artistRoute: FastifyPluginAsync = async (
         const artistData = await prisma.artist.findFirst({
           where: {
             profile: {
-              display_name: artist,
+              display_name: {
+                equals: artist,
+                mode: "insensitive",
+              },
             },
           },
           include: {
