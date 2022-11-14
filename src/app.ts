@@ -50,7 +50,7 @@ const app: FastifyPluginAsync<AppOptions> = async (
       process.env.JWT_SECRET ||
       "ac0544fe9c6d36b7451cb321239a9e954194972a27758e204118767155c5662b32c23ec9a7f9d5046689dbc8714e180359f1acd75639921ecffe3d40905ed1b4",
     sign: {
-      expiresIn: 3e5,
+      expiresIn: 300000,
     },
   });
 
