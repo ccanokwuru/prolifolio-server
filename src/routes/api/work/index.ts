@@ -1179,6 +1179,76 @@ const workRoute: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
     }
   );
 
+  // get top work
+  fastify.get(
+    "/top-work",
+    {
+      preHandler: fastify.auth(
+        [
+          // @ts-ignore
+          fastify.authenticate,
+        ],
+        { run: "all" }
+      ),
+    },
+    async function (request, reply) {
+      try {
+        const works = await prisma.work.findMany({
+          include: {
+            skills: {
+              select: {
+                id: true,
+                name: true,
+                categoryId: true,
+              },
+            },
+            artist: {
+              select: {
+                profile: {
+                  select: {
+                    display_name: true,
+                    id: true,
+                  },
+                },
+              },
+            },
+
+            reviews: true,
+            _count: {
+              select: {
+                biddings: true,
+                views: true,
+              },
+            },
+          },
+          orderBy: {
+            createdAt: "asc",
+          },
+        });
+
+        const worksWithRating = works.map((e) => {
+          const rating = e?.reviews.map((r) => r?.rating ?? 0);
+          return {
+            ...e,
+            rating: average(rating?.length ? rating : [0]),
+          };
+        });
+        const ratings = worksWithRating.map((i) => i?.rating ?? 0);
+
+        console.log({ ratings: Math.max(...ratings) });
+        const work = worksWithRating.find(
+          (a) => a.rating === Math.max(...ratings) ?? 0
+        );
+        return {
+          work,
+        };
+      } catch (error) {
+        console.log(error);
+        return reply.internalServerError();
+      }
+    }
+  );
+
   // remove a skill
   fastify.delete<{ Body: { id: string }; Params: { work: string } }>(
     "/:work/remove-skill",

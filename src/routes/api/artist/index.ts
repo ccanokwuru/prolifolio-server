@@ -13,12 +13,15 @@ const artistRoute: FastifyPluginAsync = async (
   fastify.get(
     "/",
     {
-      preHandler: fastify.auth([
-        // @ts-ignore
-        fastify.authenticate,
-        // @ts-ignore
-        fastify.is_artist_admin,
-      ]),
+      preHandler: fastify.auth(
+        [
+          // @ts-ignore
+          fastify.authenticate,
+          // @ts-ignore
+          fastify.is_artist_admin,
+        ],
+        { run: "all" }
+      ),
     },
     async function (request, reply) {
       try {
@@ -1001,6 +1004,63 @@ const artistRoute: FastifyPluginAsync = async (
             ...artistData,
             rating: rating ? average(rating) : undefined,
           },
+        };
+      } catch (error) {
+        console.log(error);
+        // @ts-ignore
+        return reply.internalServerError();
+      }
+    }
+  );
+
+  // get artist by highest rated
+  fastify.get(
+    "/top-artist",
+    {
+      preHandler: fastify.auth(
+        [
+          // @ts-ignore
+          fastify.authenticate,
+        ],
+        { run: "all" }
+      ),
+    },
+    async function (request, reply) {
+      try {
+        const artists = await prisma.artist.findMany({
+          include: {
+            profile: true,
+            skills: {
+              select: {
+                id: true,
+                name: true,
+                categoryId: true,
+              },
+            },
+            ratings: true,
+            _count: {
+              select: {
+                works: true,
+                favourites: true,
+              },
+            },
+          },
+        });
+
+        const artistWithRating = artists.map((e) => {
+          const rating = e.ratings.map((r) => r.rating);
+          return {
+            ...e,
+            rating: average(rating) ?? 0,
+          };
+        });
+
+        const ratings = artistWithRating.map((i) => i.rating);
+        const artist = artistWithRating.find(
+          (a) => a.rating === Math.max(...ratings) ?? 0
+        );
+        return {
+          artist,
         };
       } catch (error) {
         console.log(error);

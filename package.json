@@ -42,12 +42,14 @@
     "fastify": "^4.0.0",
     "fastify-bcrypt": "^1.0.0",
     "fastify-cli": "^4.3.0",
+    "fastify-formidable": "^3.0.2",
     "fastify-multer": "^2.0.3",
     "fastify-plugin": "^3.0.0",
     "lodash": "^4.17.21",
     "slugify": "^1.6.5"
   },
   "devDependencies": {
+    "@types/fs-extra": "^9.0.13",
     "@types/node": "^18.0.0",
     "@types/tap": "^15.0.5",
     "concurrently": "^7.0.0",

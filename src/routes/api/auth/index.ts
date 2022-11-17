@@ -549,7 +549,6 @@ const auth: FastifyPluginAsync = async (server, opts): Promise<void> => {
       //   ? fastify.unsignCookie(refreshToken).value
       //   : undefined;
 
-      console.log({ refreshToken });
       if (refreshToken) {
         const checkToken = JWT_Verifier(refreshToken);
         if (!checkToken) errors.push("invalid or expired session token");
@@ -594,8 +593,6 @@ const auth: FastifyPluginAsync = async (server, opts): Promise<void> => {
               },
             },
           });
-
-          console.log({ updatedSession });
 
           return reply
             .code(200)

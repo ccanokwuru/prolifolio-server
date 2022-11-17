@@ -8,6 +8,8 @@ import { FastifyCookieOptions } from "@fastify/cookie";
 import fastifyCookie = require("@fastify/cookie");
 import fastifyCors from "@fastify/cors";
 import websocketPlugin from "@fastify/websocket";
+import FastifyFormidable from "fastify-formidable";
+import { uniqueToken } from "./utils/uniqueToken";
 
 export type AppOptions = {
   // Place your custom options for app below here.
@@ -44,6 +46,13 @@ const app: FastifyPluginAsync<AppOptions> = async (
   });
 
   fastify.register(fastifyAuth);
+  fastify.register(FastifyFormidable, {
+    formidable: {
+      uploadDir: join(__dirname, "uploads"),
+      keepExtensions: true,
+      filename: uniqueToken(36),
+    },
+  });
 
   fastify.register(fastifyJwt, {
     secret:
