@@ -1,7 +1,7 @@
-import { getRandomValues } from "crypto";
+import { randomFillSync } from "crypto";
 
 export const uniqueToken = (t = 21) =>
-  getRandomValues(new Uint8Array(t)).reduce(
+  randomFillSync(new Uint8Array(t)).reduce(
     (t, e) =>
       (t +=
         (e &= 63) < 36
