@@ -9,6 +9,47 @@ interface UserData extends Profile {
 }
 
 const userRoute: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
+  // get user
+  fastify.get(
+    "/",
+    {
+      preHandler: fastify.auth(
+        [
+          // @ts-ignore
+          fastify.authenticate,
+        ],
+        { run: "all" }
+      ),
+    },
+    async function (request, reply) {
+      try {
+        const profile = await prisma.profile.findUnique({
+          where: {
+            // @ts-ignore
+            id: request.user.userId,
+          },
+          include: {
+            user: true,
+            _count: {
+              select: {
+                favourites: true,
+                works: true,
+                orders: true,
+                posts: true,
+              },
+            },
+          },
+        });
+        return {
+          profile,
+        };
+      } catch (error) {
+        console.log(error);
+        return reply.internalServerError();
+      }
+    }
+  );
+
   // update user
   fastify.put<{ Params: { user: string }; Body: UserData }>(
     "/update-profile",
