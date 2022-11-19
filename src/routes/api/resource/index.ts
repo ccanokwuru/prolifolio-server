@@ -1,6 +1,7 @@
 import { FastifyPluginAsync } from "fastify";
 import { File } from "fastify-formidable";
-import { rename } from "fs";
+import { existsSync, mkdirSync, renameSync } from "fs";
+import { join } from "path";
 
 interface UploadI {
   dest: string;
@@ -12,20 +13,31 @@ const setPath = async (data: UploadI) => {
 
   const fileType = file?.mimetype;
   const locType = fileType?.split("/")[0];
-  const newPath = `../../../uploads${dest}/${
-    locType === "video" || locType === "image" ? locType : "others"
-  }/${file.newFilename}`;
+  const newPath = join(
+    __dirname,
+    `../../../uploads/${dest}/${
+      locType === "video" || locType === "image" ? locType : "others"
+    }`
+  );
 
   let info: boolean = false;
 
-  rename(file.filepath, newPath, (err) => {
-    console.error(err);
-    if (err) return console.error(err);
-    console.log("success!");
-    info = true;
-  });
+  try {
+    const dirExists = existsSync(newPath);
+    console.log({ dirExists });
 
-  return info ? { ...file, filepath: newPath } : file;
+    if (!dirExists) {
+      const dir = mkdirSync(newPath, { recursive: true });
+      console.log({ dir });
+    }
+
+    renameSync(file.filepath, `${newPath}/${file.newFilename}`);
+    info = true;
+  } catch (err) {
+    throw err;
+  }
+
+  return info ? { ...file, filepath: `${newPath}/${file.newFilename}` } : file;
 };
 
 const resourceRoute: FastifyPluginAsync = async (
@@ -60,7 +72,8 @@ const resourceRoute: FastifyPluginAsync = async (
         return { url };
       } catch (error) {
         console.log(error);
-        return reply.internalServerError();
+        return error;
+        // return reply.internalServerError();
       }
     }
   );
