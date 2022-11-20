@@ -7,6 +7,7 @@ import {
   checkPassword,
   checkMatchPassword,
 } from "../../../utils/checkers";
+import { send, TEMPLATE } from "../../../utils/emailHelper";
 import { JWT_Signer, JWT_Verifier } from "../../../utils/jwt";
 import { uniqueToken } from "../../../utils/uniqueToken";
 const prisma = new PrismaClient();
@@ -393,12 +394,32 @@ const auth: FastifyPluginAsync = async (server, opts): Promise<void> => {
               },
             },
           },
+          include: {
+            user: {
+              include: {
+                profile: true,
+              },
+            },
+          },
         });
-        if (recovery)
-          return {
-            message: "token sent to your email",
-            token: recovery,
-          };
+        if (recovery) {
+          const sendMail = await send({
+            to: recovery.user.email,
+            data: {
+              name: recovery.user.profile?.first_name ?? "User",
+              token: recovery.token,
+            },
+            subject: "PASSWORD RECOVERY",
+            template: TEMPLATE.password,
+          });
+
+          return sendMail;
+        }
+
+        // return {
+        //   message: "token sent to your email",
+        //   token: recovery,
+        // };
       } catch (error) {
         console.log(error);
         return reply.internalServerError();

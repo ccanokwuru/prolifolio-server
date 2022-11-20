@@ -1,0 +1,41 @@
+
+<style type="text/css">
+    .row {
+        width: 100%;
+    }
+
+    .shadow {
+        box-shadow: 0 3px 4px 3px rgba(0, 0, 0, 0.1);
+    }
+
+    .col-2 {
+        max-width: 300px;
+    }
+
+</style>
+
+Hi {{data.name}}!,
+<p class="gap">
+    We at Logo.io are dedicated to help you as you tour the world and we have this for you
+</p>
+
+<div class="row">
+    <h1 class="padding">
+        {{data.listType}}
+    </h1>
+    <div class="row" style="text-align: justify;">
+    <ul>
+        {% for item in items %}
+            <li>
+                {% block template %}
+                    This is the default content
+                {% endblock %}
+            </li>
+        {% else %}
+            <li>Nothing Here</li>
+        {% endfor %}
+    </ul>
+    </div>
+</div>
+
+        

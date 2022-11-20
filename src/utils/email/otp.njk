@@ -1,0 +1,22 @@
+{% extends "./defaultLayout.njk" %}
+{% block content %}
+Hello {{data.name}}!,
+<p class="gap">
+    Use this One Time Pin (OTP) for your account,
+</p>
+<p class="gap">
+    {{data.otp}}
+</p>
+<p class="gap">
+    copy the link below or clink
+</p>
+
+<p class="gap">
+    <a href="https://prolifolio.vercel.app/reset-password/{{data.token}}" target="_blank" class="btn bg-primary"
+        style="color:white ; display:block;width: fit-content;"><b>Reset Password</b>
+    </a>
+</p>
+<a target="_blank" href="https://prolifolio.vercel.app/reset-password/{{data.token}}">
+    https://prolifolio.vercel.app/reset-password/{{data.token}}
+</a>
+{% endblock %}
