@@ -16,17 +16,17 @@ interface EmailI {
 }
 
 const send = async (data: EmailI) => {
-  // const testAccount = await nodeMailer.createTestAccount();
+  const testAccount = await nodeMailer.createTestAccount();
 
   const transporter = nodeMailer.createTransport({
-    host: process.env.SMTP_HOST ?? "smtp-relay.sendinblue.com",
-    port: !Number.isNaN(Number(process.env.EMAIL_HOST))
-      ? Number(process.env.EMAIL_HOST)
-      : 587,
+    host: process.env.SMTP_HOST ?? "smtp.ethereal.email",
+    port: !Number.isNaN(Number(process.env.SMTP_PORT))
+      ? Number(process.env.SMTP_PORT)
+      : 587, //465,587
     secure: false, // true for 465, false for other ports
     auth: {
-      user: process.env.SMTP_EMAIL ?? "cccanoks@gmail.com", // generated ethereal user
-      pass: process.env.SMTP_PWD ?? "CH12G764hSDRvPkw", // generated ethereal password
+      user: process.env.SMTP_EMAIL ?? testAccount.user, // generated ethereal user
+      pass: process.env.SMTP_PWD ?? testAccount.pass, // generated ethereal password
     },
   });
 
