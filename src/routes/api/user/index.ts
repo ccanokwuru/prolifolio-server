@@ -51,7 +51,7 @@ const userRoute: FastifyPluginAsync = async (fastify, opts): Promise<void> => {
   );
 
   // update user
-  fastify.put<{ Params: { user: string }; Body: UserData }>(
+  fastify.put<{ Body: UserData }>(
     "/update-profile",
     {
       schema: {

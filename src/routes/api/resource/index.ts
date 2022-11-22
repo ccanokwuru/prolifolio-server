@@ -69,8 +69,11 @@ const resourceRoute: FastifyPluginAsync = async (
     },
     async function (request, reply) {
       try {
+        console.log({ body: request.body });
         await request.parseMultipart();
         const files = request.files;
+
+        console.log({ files });
 
         const file = await setPath({
           // @ts-ignore
@@ -92,6 +95,7 @@ const resourceRoute: FastifyPluginAsync = async (
 
         return {
           message: "successfull",
+          url: `http://localhost:5000/api/resource${url}`,
         };
       } catch (error) {
         console.log(error);
@@ -137,6 +141,7 @@ const resourceRoute: FastifyPluginAsync = async (
         const url = file.filepath.split("/uploads")[1];
 
         return {
+          message: "successfull",
           type: request.query.type,
           url,
         };
