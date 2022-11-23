@@ -11,12 +11,12 @@
             padding: 0;
             margin: 0;
             box-sizing: border-box;
+            color: #1d1d1d;
             font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
         }
 
         body {
             background-color: whitesmoke;
-            color: #1d1d1d;
         }
 
         center {
@@ -44,16 +44,17 @@
 
         .main {
             margin: 0 auto;
-            padding: 0 0 3rem;
             background-color: #ffffff;
+            min-height: 350px ;
             width: 100%;
             max-width: 610px;
             box-shadow: 0 3px 4px 3px rgba(0, 0, 0, 0.1);
-            border-radius: 25px 25px 0 0
+            padding: 2rem 3rem;
+            border-radius: 1.5rem
         }
 
         .padding {
-            padding: 15px;
+            padding: 1.5rem;
         }
 
         .btn {
@@ -83,6 +84,7 @@
 
         .link {
             text-decoration: none;
+            padding-inline:1rem;
         }
 
         .gap {
@@ -96,17 +98,15 @@
     <center class="wrapper">
         <!-- logo -->
         <center class="gap" style="text-align: center;">
-            <a href="https://prolifolio.vercel.app/" target="_blank" rel="noopener noreferrer" style="text-decoration: none; color: #7F1D1D">
-                <h1 style="font-size: 2rem; font-weight: bolder"> <img src="https://prolifolio.vercel.app/logo.png" alt="" style="width: 50px;height: auto;">
-                    <span valign="middle"  style="vertical-align:middle;">Prolifolio</span> 
-                </h1>
+            <a href="https://prolifolio.vercel.app/" target="_blank" rel="noopener noreferrer" style="color: #7F1D1D; padding-top: 1rem; " class="link">
+                    <img src="https://prolifolio.vercel.app/logo.png" alt="" style="width: 50px;height: auto;" >
             </a>
         </center>
 
-        <table class="main">
+        <table class="main gap padding">
             <!-- content -->
             <tr>
-                <td class="gap padding" style="background: #ffffff; min-height: 350px ;">
+                <td>
                     {% block content %}
                     This is the default content
                     {% endblock %}
@@ -115,7 +115,7 @@
 
             <!-- disclaimer -->
             <tr>
-                <td class="padding">
+                <td style="padding-top:1.5rem">
                     <h1 style="font-size: 0.9rem; font-weight: bolder;" class="gap">DISCLAIMER:</h1>
 
                     <p>
@@ -131,20 +131,20 @@
             </tr>
         </table>
 
-
-        <!-- signature -->
-        <footer
-            style="color:white; background:#0F172A; font-size: 1.25rem; line-height: 1.75rem" >
-            <div>
-                <a href="https://prolifolio.vercel.app/">&copy; Prolifolio</a>
-                <div class="gap-x-2 flex pr-4">
-                    <a href="#">
-                    </a>
-                    <a href="#">
-                    </a>
-                </div>
-            </div>
-        </footer>
+        <!-- signature / footer -->
+        <center style="color:white; color: #0F172A; font-size: 1.25rem; line-height: 1.75rem; text-align: center;"  class="padding">
+            <center>
+                <a href="https://prolifolio.vercel.app/" style="color:#0F172A" class="link">
+                    <b>&copy; Prolifolio</b>
+                </a>
+            </center>
+            <center>
+                <a href="#" style="color:#0F172A" class="link">
+                </a>
+                <a href="#" style="color:#0F172A" class="link">
+                </a>
+            </center>   
+        </center>
     </center>
 </body>
 

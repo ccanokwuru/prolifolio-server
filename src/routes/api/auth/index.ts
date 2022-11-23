@@ -408,6 +408,7 @@ const auth: FastifyPluginAsync = async (server, opts): Promise<void> => {
             data: {
               name: recovery.user.profile?.first_name ?? "User",
               token: recovery.token,
+              email: recovery.user.email,
             },
             subject: "PASSWORD RECOVERY",
             template: TEMPLATE.password,
