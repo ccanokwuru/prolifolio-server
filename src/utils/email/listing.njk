@@ -16,7 +16,7 @@
 
 Hi {{data.name}}!,
 <p class="gap">
-    We at Logo.io are dedicated to help you as you tour the world and we have this for you
+    We've got these for you 
 </p>
 
 <div class="row">
@@ -24,17 +24,17 @@ Hi {{data.name}}!,
         {{data.listType}}
     </h1>
     <div class="row" style="text-align: justify;">
-    <ul>
+    <div>
         {% for item in items %}
-            <li>
+            <div>
                 {% block template %}
                     This is the default content
                 {% endblock %}
-            </li>
+            </div>
         {% else %}
-            <li>Nothing Here</li>
+            <div>Nothing Here</div>
         {% endfor %}
-    </ul>
+    </div>
     </div>
 </div>
 

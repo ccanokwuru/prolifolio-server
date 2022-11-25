@@ -118,18 +118,13 @@ const auth: FastifyPluginAsync = async (server, opts): Promise<void> => {
             `user with display_name "${display_name}" already exists`
           );
         }
-      } catch (error) {
-        console.log(error);
-      }
+        if (errors.length)
+          return reply.code(emailCheck || passwordCheck ? 406 : 409).send({
+            message: "Registration failed",
+            errors,
+          });
 
-      if (errors.length)
-        return reply.code(emailCheck || passwordCheck ? 406 : 409).send({
-          message: "Registration failed",
-          errors,
-        });
-
-      // create the user
-      try {
+        // create the user
         const user = await prisma.user.create({
           data: {
             email: email,
@@ -154,6 +149,16 @@ const auth: FastifyPluginAsync = async (server, opts): Promise<void> => {
             role: true,
             profile: true,
           },
+        });
+
+        await send({
+          to: user.email,
+          data: {
+            name: user.profile?.first_name ?? "User",
+            email: user.email,
+          },
+          subject: "WELCOME ONBOARD",
+          template: TEMPLATE.welcome,
         });
 
         return reply.code(201).send({
