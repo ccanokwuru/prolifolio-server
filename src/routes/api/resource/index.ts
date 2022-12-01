@@ -71,7 +71,6 @@ const resourceRoute: FastifyPluginAsync = async (
     },
     async function (request, reply) {
       try {
-        console.log({ body: request.body });
         await request.parseMultipart();
         const files = request.files;
 
