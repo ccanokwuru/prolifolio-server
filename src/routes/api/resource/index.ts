@@ -19,6 +19,8 @@ interface UploadI {
 }
 const prisma = new PrismaClient();
 
+const live = process.env.LIVE_LINK ?? "http://localhost:5000/";
+
 const setPath = async (data: UploadI) => {
   const { dest, file } = data;
 
@@ -73,8 +75,6 @@ const resourceRoute: FastifyPluginAsync = async (
         await request.parseMultipart();
         const files = request.files;
 
-        console.log({ files });
-
         const file = await setPath({
           // @ts-ignore
           file: files?.avatar,
@@ -89,13 +89,13 @@ const resourceRoute: FastifyPluginAsync = async (
             userId: request.user.id,
           },
           data: {
-            avatar: `http://localhost:5000/api/resource${url}`,
+            avatar: `${live}api/resource${url}`,
           },
         });
 
         return {
           message: "successfull",
-          url: `http://localhost:5000/api/resource${url}`,
+          url: `${live}api/resource${url}`,
         };
       } catch (error) {
         console.log(error);
